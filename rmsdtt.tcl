@@ -429,7 +429,46 @@ proc ::RMSDTT::saveData {} {
   
 }
 
-
+proc ::RMSDTT::tempfile {prefix suffix} {
+  # From wiki.tcl.tk/772
+  set chars "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+  set nrand_chars 10
+  set maxtries 10
+  set access [list RDWR CREAT EXCL TRUNC]
+  set permission 0600
+  set channel ""
+  set checked_dir_writable 0
+  set mypid [pid]
+  for {set i 0} {$i < $maxtries} {incr i} {
+    set newname $prefix
+    for {set j 0} {$j < $nrand_chars} {incr j} {
+      append newname [string index $chars \
+			[expr ([clock clicks] ^ $mypid) % 62]]
+    }
+    append newname $suffix
+    if {[file exists $newname]} {
+      after 1
+    } else {
+      if {[catch {open $newname $access $permission} channel]} {
+	if {!$checked_dir_writable} {
+	  set dirname [file dirname $newname]
+	  if {![file writable $dirname]} {
+	    error "Directory $dirname is not writable"
+	  }
+	  set checked_dir_writable 1
+	}
+      } else {
+	# Success
+	return [list $newname $channel]
+      }
+    }
+  }
+  if {[string compare $channel ""]} {
+    error "Failed to open a temporary file: $chanel"
+  } else {
+    error "Failed to find an unused temporary file name"
+  }
+}
 
 proc ::RMSDTT::doPlot {} {
   variable rms_values
@@ -441,8 +480,9 @@ proc ::RMSDTT::doPlot {} {
   
 #  set pipe_id [open "| xmgrace -pipe &" w]
 
-  set filename "rmsdtt.tmp"
-  set pipe_id [open $filename w]
+  set f [::RMSDTT::tempfile rmsdtt .tmp]
+  set filename [lindex $f 0]
+  set pipe_id [lindex $f 1]
   fconfigure $pipe_id -buffering line
 
   puts $pipe_id "@ page size 576, 432"
@@ -480,9 +520,8 @@ proc ::RMSDTT::doPlot {} {
   if { $status } {
     bell
     puts "Could not open xmagrace: $msg"
-  }
-  
-  after 1000 file delete -force $filename
+    file delete -force $filename
+  } 
 }
 
 proc ::RMSDTT::ctrltraj {} {
@@ -494,7 +533,6 @@ proc ::RMSDTT::ctrltraj {} {
   if {$frames_sw} {
     $w.top.right.file.plot config -state normal
     $w.top.right.file.0 config -state normal
-    $w.top.right.file.label config -state normal
     $w.top.right.file.name config -state normal
     $w.top.right.frames.reflabel config -state normal
     $w.top.right.frames.ref config -state normal
@@ -503,7 +541,6 @@ proc ::RMSDTT::ctrltraj {} {
   } else {
     $w.top.right.file.plot config -state disable
     $w.top.right.file.0 config -state disable
-    $w.top.right.file.label config -state disable
     $w.top.right.file.name config -state disable
     $w.top.right.frames.reflabel config -state disable
     $w.top.right.frames.ref config -state disable
@@ -660,11 +697,10 @@ proc ::RMSDTT::rmsdtt {} {
   checkbutton $calc_top.right.frames.0 -highlightthickness 0 \
     -activebackground $calc_bgcol -bg $calc_bgcol \
     -fg $calc_fgcol -activeforeground $calc_fgcol \
-    -width 15 \
-    -text {Trajectory} -variable [namespace current]::frames_sw \
+    -text "Trajectory" -variable [namespace current]::frames_sw \
     -command ::RMSDTT::ctrltraj
 
-    label $calc_top.right.frames.reflabel -text {Frame ref:} \
+    label $calc_top.right.frames.reflabel -text "Frame ref:" \
     -bg $calc_bgcol -fg $calc_fgcol \
     -padx 3 -pady 3
 
@@ -683,17 +719,20 @@ proc ::RMSDTT::rmsdtt {} {
   checkbutton $calc_top.right.file.0 -highlightthickness 0 \
     -activebackground $calc_bgcol -bg $calc_bgcol \
     -fg $calc_fgcol -activeforeground $calc_fgcol \
-    -width 15 \
-    -text "Save to file" -variable [namespace current]::file_out_sw
-
-    label $calc_top.right.file.label -text {Name:} \
-    -bg $calc_bgcol -fg $calc_fgcol \
-    -padx 3 -pady 3
+    -text "Save to file:" -variable [namespace current]::file_out_sw \
+    -command [namespace code {
+      if {$file_out_sw} {
+	$w.top.right.file.name config -state normal
+      } else {
+	$w.top.right.file.name config -state disable
+      }
+      puts "$file_out_sw"
+    }]
 
   entry $calc_top.right.file.name -bd 0 -highlightthickness 0 -insertofftime 0 \
     -bg $entry_bgcol -selectbackground $sel_bgcol -selectforeground $sel_fgcol \
     -selectborderwidth 0 -exportselection yes -width 15 \
-    -textvariable [namespace current]::file_out
+    -textvariable [namespace current]::file_out -state disable
 
   # Pack the top part widgets.
   pack $calc_top -side top -fill both -expand 1 
@@ -720,7 +759,7 @@ proc ::RMSDTT::rmsdtt {} {
   pack $calc_top.right.frames.0 $calc_top.right.frames.reflabel $calc_top.right.frames.ref\
     -side left -fill both -padx 2 -pady 2
   pack $calc_top.right.file -side top -fill both
-  pack $calc_top.right.file.plot $calc_top.right.file.0 $calc_top.right.file.label $calc_top.right.file.name\
+  pack $calc_top.right.file.plot $calc_top.right.file.0 $calc_top.right.file.name\
     -side left -fill both -padx 2 -pady 2
 
 
@@ -744,7 +783,7 @@ grid $calc_mid.titlebar.right -in $calc_mid.titlebar -column 1 -row 0 -columnspa
     -bg $calc_bgcol -fg $calc_fgcol \
     -padx 3 -pady 3
     
-    label $calc_mid.titlebar.right.label -text {RMS deviations:} \
+    label $calc_mid.titlebar.right.label -text {RMSD Average:} \
     -bg $calc_bgcol -fg $calc_fgcol \
     -padx 3 -pady 3
     
@@ -771,7 +810,7 @@ grid $calc_mid.titlebar.right -in $calc_mid.titlebar -column 1 -row 0 -columnspa
     $rms_list insert end $rms_ave($i)
   }
 
-  set rmstot_lbl [label $rms_disp.rmstot_lbl -text {Total RMSD:} -anchor w -pady 3 \
+  set rmstot_lbl [label $rms_disp.rmstot_lbl -text {Overall Average RMSD:} -anchor w -pady 3 \
       -bg $calc_bgcol -relief raised -bd 2 -fg $calc_fgcol]
   set rmstot_val [label $rms_disp.rmstot_val -textvariable [namespace current]::tot_rms -anchor w -pady 3 \
       -bg $calc_bgcol -relief raised -bd 2 -fg $calc_fgcol]
@@ -787,7 +826,7 @@ grid $calc_mid.titlebar.right -in $calc_mid.titlebar -column 1 -row 0 -columnspa
 
   # Pack the bottom part widgets.
   pack $calc_mid.titlebar.left.label  -side left -in  $calc_mid.titlebar.left
-  pack $calc_mid.titlebar.right.label -side top -in  $calc_mid.titlebar.right
+  pack $calc_mid.titlebar.right.label -side left -in  $calc_mid.titlebar.right
   
   pack $calc_mid.titlebar -side top -fill x -in  $calc_mid
   pack $calc_mid -side top -fill both -expand 1
