@@ -40,7 +40,7 @@ namespace eval ::RMSDTT:: {
   variable rms_sel                   ;# rms selection text
   variable rmsd_base                 ;# which molecule is the reference for rmsd calc.
   variable tot_rms                   ;# total rms value 
-  variable RMSDhistory				 ;# history of selections
+  variable RMSDhistory		     ;# history of selections
   variable rms_values
   
   option add *Font {Helvetica -12}
@@ -146,13 +146,6 @@ proc ::RMSDTT::align_all {sel_text rmsd_base frame_ref} {
 }
 
 
-proc ::RMSDTT::get_rmsd { mol1 mol2 sel_text } {
-  set sel1 [atomselect $mol1 $sel_text] 
-  set sel2 [atomselect $mol2 $sel_text]
-  measure rmsd $sel1 $sel2
-}
-
-
 proc ::RMSDTT::ini_zero {length} {
   if {$length<=0} return {}
 
@@ -217,14 +210,12 @@ proc ::RMSDTT::compute_rms {base sel_text frame_ref} {
     return -code return
   }
 
+  # Check if the top molecule is listed in the pdb list.
+  set topisthere [lsearch $all_mols $mol_on_top]
   foreach i $all_mols {
     set jmax [molinfo $i get numframes]
     set natoms($i) [[atomselect $i $sel_text frame 0] num]
-    for {set j 0} {$j < $jmax} {incr j} {
-      set all_coor($i,$j) [[atomselect $i $sel_text frame $j] get {x y z}]
-    }
   }
-  
   # Check same number of atoms
   foreach i $all_mols {
     foreach j $all_mols {
@@ -236,18 +227,23 @@ proc ::RMSDTT::compute_rms {base sel_text frame_ref} {
       }
     }
   }
-  
-  # do the top molecule as well, just in case it's not in the pdb list and is selected for RMSD calculation
-  set jmax [molinfo $mol_on_top get numframes]
-  for {set j 0} {$j < $jmax} {incr j} {
-    set all_coor($mol_on_top,$j) [[atomselect $mol_on_top $sel_text frame $j] get {x y z}]
+  if {$topisthere < 0} {
+    set jmax [molinfo $mol_on_top get numframes]
+    set natomstop [[atomselect $mol_on_top $sel_text frame 0] num]
+    foreach i $all_mols {
+      if {$natoms($i) != $natomstop } {
+	::RMSDTT::showMessage "Selections differ for molecules $i ($natoms($i)) and top ($natomstop)"
+	return -code return
+      }
+    }
   }
+    
   
   switch $base {
     top {
       set mol_ref $mol_on_top
       if {$frames_sw == 0} {
-	set j [molinfo $mol_on_top get frame]
+	set frame_ref [molinfo $mol_ref get frame]
       } else {
 	set j $frame_ref
 	set n0 [molinfo $mol_ref get numframes]
@@ -256,28 +252,40 @@ proc ::RMSDTT::compute_rms {base sel_text frame_ref} {
 	  return -code return
 	}
       }
-      set ave_coor $all_coor($mol_on_top,$j)
-      set len [llength $ave_coor]
-      # check if the top molecule is listed in the pdb list
-      # if so, need to adjust n_mols
-      set isthere [lsearch $all_mols $mol_on_top]
-      if {$isthere>=0 && $frames_sw == 0} {incr n_mols -1}
+      if {$topisthere >= 0 && $frames_sw == 0} {incr n_mols -1}
     }
   
     ave {
       set mol_ref "ave"
-      set ave_coor {}
-      set m0 [lindex $all_mols 0]
-      set len [llength $all_coor($m0,0)]
-      set factor [expr 1./$n_mols]
-      for {set j 0} {$j<$len} {incr j} {
-        set b [veczero]
-        foreach i $all_mols {
-	  set k [molinfo $i get frame]
-          set b [vecadd $b [lindex $all_coor($i,$k) $j]]
-        }
-        lappend ave_coor [vecscale $b $factor]
+      set ref_coor {}
+
+      if {$frames_sw == 0} {
+	set m0 [lindex $all_mols 0]
+	set len [llength [[atomselect $m0 $sel_text frame 0] get {x y z}]]
+	set factor [expr 1./$n_mols]
+	for {set j 0} {$j<$len} {incr j} {
+	  set b [veczero]
+	  foreach i $all_mols {
+	    set k [molinfo $i get frame]
+	    set b [vecadd $b [lindex [[atomselect $i $sel_text frame $k] get {x y z}] $j]]
+	  }
+	  lappend ref_coor [vecscale $b $factor]
+	}
+      } else {
+	set len [llength [[atomselect $mol_on_top $sel_text frame 0] get {x y z}]]
+	set nframes [molinfo $mol_on_top get numframes]
+	set factor [expr 1./$nframes]
+	for {set j 0} {$j<$len} {incr j} {
+	  set b [veczero]
+	  for {set i 0} {$i < $nframes} {incr i} {
+	    set b [vecadd $b [lindex [[atomselect $mol_on_top $sel_text frame $i] get {x y z}] $j]]
+	  }
+	  lappend ref_coor [vecscale $b $factor]
+	}
+
       }
+
+      puts [lindex $ref_coor 0]
     }
   
     selected {
@@ -294,39 +302,28 @@ proc ::RMSDTT::compute_rms {base sel_text frame_ref} {
 	  return -code return
 	}
       }
-      set ave_coor $all_coor($index,$j) 
-      set len [llength $ave_coor]
     }
   }
 
-  #set factor [expr 1./$n_mols]
   set tot_rms 0
-  foreach i $all_mols {   # for each molecule
+  
+  # for each molecule
+  foreach i $all_mols {
     set jmax [molinfo $i get numframes]
-    if {$frames_sw == 0} {
-      set jmax 1
-    }
+    if {$frames_sw == 0} { set jmax 1 }
 
     set rms_ave($i) 0
 
-    for {set j 0} {$j < $jmax} {incr j} {   # for each frame
-      set r 0
+    # for each frame
+    for {set j 0} {$j < $jmax} {incr j} {
       if {$frames_sw == 0} {set j [molinfo $i get frame]}
-      for {set k 0} {$k<$len} {incr k} {    # for each atom
-	set v1 [lindex $ave_coor $k]
-	set v2 [lindex $all_coor($i,$j) $k]
-	set r [expr $r + [veclength2 [vecsub $v1 $v2]]]
+      if {$base == "ave"} {
+	set rmsd [get_rmsd_ave $ref_coor $i $j $sel_text]
+      } else {
+	set rmsd [get_rmsd $mol_ref $frame_ref $i $j $sel_text]
       }
-      if {$len < 1} {
-	::RMSDTT::showMessage "Selection \"$sel_text\" match no atom"
-	return -code return
-      }
-      set r [expr $r/$len]
-      set r [expr sqrt($r)]
-      
-      set rms_values($i,$j) $r
-
-      set rms_ave($i) [expr $rms_ave($i) + $r]
+      set rms_values($i,$j) $rmsd
+      set rms_ave($i) [expr $rms_ave($i) + $rmsd]
     }
 
     if {$frames_sw == 1 && $mol_ref == $i && $jmax > 1} {incr jmax -1}
@@ -339,19 +336,38 @@ proc ::RMSDTT::compute_rms {base sel_text frame_ref} {
   return $tot_rms
 }
 
+proc ::RMSDTT::get_rmsd { mol1 frame1 mol2 frame2 sel_text } {
+  set sel1 [atomselect $mol1 $sel_text frame $frame1] 
+  set sel2 [atomselect $mol2 $sel_text frame $frame2]
+  set rmsd [measure rmsd $sel1 $sel2]
+  return $rmsd
+}
+
+proc ::RMSDTT::get_rmsd_ave { ref_coor mol2 frame2 sel_text } {
+  set sel2 [atomselect $mol2 $sel_text frame $frame2]
+  set coor2 [$sel2 get {x y z}]
+  set numatoms [llength $ref_coor]
+
+  set rmsd 0
+  # for each atom
+  for {set k 0} {$k < $numatoms} {incr k} {
+    set v1 [lindex $ref_coor $k]
+    set v2 [lindex $coor2 $k]
+    set rmsd [expr $rmsd + [veclength2 [vecsub $v1 $v2]]]
+  }
+  set rmsd [expr $rmsd/$numatoms]
+  set rmsd [expr sqrt($rmsd)]
+  
+  return $rmsd
+}
 
 proc ::RMSDTT::reveal_rms {} {
   variable rms_ave 
   variable rms_list 
-  variable pdb_list
-
-  set all_mols [get_molid_from_pdb_list_to_operate_on]
  
-  $pdb_list delete 0 end
+  set all_mols [get_molid_from_pdb_list_to_operate_on]
   $rms_list delete 0 end
-    
   foreach i $all_mols {
-    $pdb_list insert end [format "%-4s%-10s" $i [molinfo $i get name]]
     $rms_list insert end $rms_ave($i)
   }
 }
@@ -368,7 +384,9 @@ proc ::RMSDTT::two_scroll args {
 
 proc ::RMSDTT::onlyactive args {
   variable pdb_list 
+  variable rms_list
   $pdb_list delete 0 end
+  $rms_list delete 0 end
   for {set i 0} {$i < [molinfo num]} {incr i} {
     set molid [molinfo index $i]
     if {[molinfo $molid get active]} {$pdb_list insert end [format "%-4s%-10s" $molid [molinfo $molid get name]]}      
@@ -443,6 +461,9 @@ proc ::RMSDTT::saveData {} {
   variable rms_values
   variable file_out
   variable file_out_sw
+  variable time_sw
+  variable time_ini
+  variable time_step
   
   set file_out_id [open $file_out w]
   fconfigure $file_out_id -buffering line
@@ -450,8 +471,11 @@ proc ::RMSDTT::saveData {} {
   set all_mols [get_molid_from_pdb_list_to_operate_on]
   set n_mols [llength $all_mols]
 
-  puts -nonewline $file_out_id "frame"
-
+  if {$time_sw} {
+    puts -nonewline $file_out_id "time"
+  } else {
+    puts -nonewline $file_out_id "frame"
+  }
   set jmaxmax 1
   foreach i $all_mols {
     set jmax($i) [molinfo $i get numframes]
@@ -460,8 +484,16 @@ proc ::RMSDTT::saveData {} {
   }
   puts $file_out_id ""
   
+  if {$time_sw} {
+    set time $time_ini
+  }
   for {set j 0} {$j < $jmaxmax} {incr j} {
-    puts -nonewline $file_out_id [format "%5d" $j]
+    if {$time_sw} {
+      puts -nonewline $file_out_id [format "%8.2f" $time]
+      set time [expr $time + $time_step]
+    } else {
+      puts -nonewline $file_out_id [format "%5d" $j]
+    }
     foreach i $all_mols {
       set jmax($i) [molinfo $i get numframes]
 #      puts -nonewline "$j $i $jmax($i) $jmaxmax"
@@ -571,79 +603,236 @@ proc ::RMSDTT::doAlign {} {
 proc ::RMSDTT::doPlot {} {
   variable rms_values
   variable rms_sel
-
+  variable time_sw
+  variable time_ini
+  variable time_step
+  global tcl_platform
+  
   set all_mols [get_molid_from_pdb_list_to_operate_on]
   set n_mols [llength $all_mols]
 
-  #parray rms_values
-  
-#  set pipe_id [open "| xmgrace -pipe &" w]
-
-  set f [::RMSDTT::tempfile rmsdtt .tmp]
-  set filename [lindex $f 0]
-  set pipe_id [lindex $f 1]
-  fconfigure $pipe_id -buffering line
-
-  puts $pipe_id "@ page size 576, 432"
-  puts $pipe_id "@ g0 on"
-  puts $pipe_id "@ with g0"
-  puts $pipe_id "@ title \"Rmsd vs Frame\""
-  puts $pipe_id "@ subtitle \"$rms_sel\""
-  puts $pipe_id "@ xaxis  label \"Frame\""
-  puts $pipe_id "@ yaxis  label \"Rmsd (A)\""
-  puts $pipe_id "@ TYPE xy"
-  puts $pipe_id "@ view 0.15, 0.15, 0.75, 0.85"
-  puts $pipe_id "@ legend on"
-  puts $pipe_id "@ legend box on"
-  set k 0
-  foreach i $all_mols {
-    set iname [molinfo $i get name]
-    puts $pipe_id "@ s$k legend \"$iname ($i)\""
-    set jmax [molinfo $i get numframes]
-    if {$jmax == 1} {
-      puts $pipe_id "@ s$k symbol 1"
+  switch $tcl_platform(platform) {
+    unix {
+      # parray rms_values
+      # set pipe_id [open "| xmgrace -pipe &" w]
+      
+      set f [::RMSDTT::tempfile rmsdtt .tmp]
+      set filename [lindex $f 0]
+      set pipe_id [lindex $f 1]
+      fconfigure $pipe_id -buffering line
+      
+      puts $pipe_id "@ page size 576, 432"
+      puts $pipe_id "@ g0 on"
+      puts $pipe_id "@ with g0"
+      puts $pipe_id "@ subtitle \"$rms_sel\""
+      if {$time_sw} {
+	puts $pipe_id "@ title \"Rmsd vs Time\""
+	puts $pipe_id "@ xaxis  label \"Time (ps)\""
+      } else {
+	puts $pipe_id "@ title \"Rmsd vs Frame\""
+	puts $pipe_id "@ xaxis  label \"Frame\""
+      }
+      puts $pipe_id "@ yaxis  label \"Rmsd (A)\""
+      puts $pipe_id "@ TYPE xy"
+      puts $pipe_id "@ view 0.15, 0.15, 0.75, 0.85"
+      puts $pipe_id "@ legend on"
+      puts $pipe_id "@ legend box on"
+      set k 0
+      foreach i $all_mols {
+	set iname [molinfo $i get name]
+	puts $pipe_id "@ s$k legend \"$iname ($i)\""
+	set jmax [molinfo $i get numframes]
+	if {$jmax == 1} {
+	  puts $pipe_id "@ s$k symbol 1"
+	}
+	if {$time_sw} {
+	  set time $time_ini
+	}
+	for {set j 0} {$j < $jmax} {incr j} {
+	  if {$time_sw} {
+	    puts $pipe_id "$time $rms_values($i,$j)"
+	    set time [expr $time + $time_step]
+	  } else {
+	    puts $pipe_id "$j $rms_values($i,$j)"
+	  }
+	}
+	puts $pipe_id ""
+	set k [expr $k+1]
+	
+      }
+      #  foreach i [lsort -dictionary [array names rms_values]] {
+      #    #puts $i:$rms_values($i)
+      #  }
+      
+      close $pipe_id
+      set status [catch {exec xmgrace $filename &} msg]
+      if { $status } {
+	::RMSDTT::showMessage "Could not open xmgrace. Error returned:\n $msg"
+	file delete -force $filename
+	return -code return
+      } 
     }
-    for {set j 0} {$j < $jmax} {incr j} {
-      puts $pipe_id "$j $rms_values($i,$j)"
+    windows {
+      package require tcom
+      
+      set excel [::tcom::ref createobject "Excel.Application"]
+      #set excel [::tcom::ref getactiveobject "Excel.Application"]
+      $excel Visible 1
+      
+      set workbooks [$excel Workbooks]
+      set workbook [$workbooks Add]
+      set worksheets [$workbook Worksheets]
+      [$worksheets Item [expr 2]] Delete
+      [$worksheets Item [expr 2]] Delete
+      set worksheet [$worksheets Item [expr 1]]
+      $worksheet Name "RMSDTT data"
+      
+      set cells [$worksheet Cells]
+      set jmaxmax 1
+      foreach i $all_mols {
+	set jmax($i) [molinfo $i get numframes]
+	if {$jmax($i) > $jmaxmax} {set jmaxmax $jmax($i)}
+      }
+      if {$time_sw} {
+	$cells Item 1 1 "Time (ps)"
+	set time $time_ini
+	for {set j 0} {$j < $jmaxmax} {incr j} {
+	  $cells Item [expr $j+2] 1 $time
+	  set time [expr $time + $time_step]
+	}
+	set exceltitle "Rmsd vs Time"
+      } else {
+	$cells Item 1 1 "Frame"
+	for {set j 0} {$j < $jmaxmax} {incr j} {
+	  $cells Item [expr $j+2] 1 $j
+	}
+	set exceltitle "Rmsd vs Frame"
+      }
+      set k 1
+      foreach i $all_mols {
+	incr k
+	set iname [molinfo $i get name]
+	$cells Item 1 $k "$iname ($i)"
+
+	for {set j 0} {$j < $jmax($i)} {incr j} {
+	  $cells Item [expr $j+2] $k $rms_values($i,$j)
+	}
+      }
+
+      set charts [$workbook Charts]
+      set chart [$charts Add]
+      $chart Name "RMSDTT graph"
+      set endrange [::RMSDTT::int2word $k]
+      append endrange [expr $jmaxmax+2]
+      $chart ChartWizard [$worksheet Range "A1" $endrange] -4169 [::tcom::na] 2 1 [expr $k-1] 1 "$exceltitle\n($rms_sel)"
+      $chart ChartType 75
+      [[$chart PlotArea] Interior] ColorIndex 0
+      
+      set axes [$chart Axes]
+      set xaxis [$axes Item 1]
+      $xaxis HasMajorGridlines 0
+      $xaxis HasTitle 1
+      if {$time_sw} {
+	[$xaxis AxisTitle] Text "Time (ps)"
+      } else {
+	[$xaxis AxisTitle] Text "Frame"
+      }
+      set yaxis [$axes Item 2]
+      $yaxis HasMajorGridlines 0
+      $yaxis HasTitle 1
+      [$yaxis AxisTitle] Text "Rmsd (A)"
+
+#      set interface [::tcom::info interface $xaxis]
+#      set properties [$interface properties]
+#      foreach property $properties {
+#	puts "property $property"
+#      }
+#      set methods [$interface methods]
+#      foreach method $methods {
+#			       puts "method [lrange $method 0 2] \{"
+#			       set parameters [lindex $method 3]
+#			       foreach parameter $parameters {
+#				 puts "    \{$parameter\}"
+#			       }
+#			       puts "\}"
+#			     }
+      #$excel Quit
     }
-    puts $pipe_id ""
-    set k [expr $k+1]
-    
   }
-  #  foreach i [lsort -dictionary [array names rms_values]] {
-  #    #puts $i:$rms_values($i)
-  #  }
-  
-  close $pipe_id
-  set status [catch {exec xmgrace $filename &} msg]
-  if { $status } {
-    ::RMSDTT::showMessage "Could not open xmgrace. Error returned:\n $msg"
-    file delete -force $filename
-    return -code return
-  } 
+
+
+}
+
+proc RMSDTT::int2word {int} {
+  # http://wiki.tcl.tk/10915
+  set alphabet [a-z]
+  set word ""
+  set la [llength $alphabet]
+  while {$int > 0} {
+    incr int -1
+    set word  [lindex $alphabet [expr {$int % $la}]]$word
+    set int   [expr {$int/$la}]
+  }
+  set word
+}
+proc a-z {} {list a b c d e f g h i j k l m n o p q r s t u v w x y z}
+
+proc ::RMSDTT::ctrltime {} {
+  variable w
+  variable time_sw
+  if {$time_sw} {
+    $w.top.right.traj.time.inilabel config -state normal
+    $w.top.right.traj.time.inival config -state normal
+    $w.top.right.traj.time.steplabel config -state normal
+    $w.top.right.traj.time.stepval config -state normal
+  } else {
+    $w.top.right.traj.time.inilabel config -state disable
+    $w.top.right.traj.time.inival config -state disable
+    $w.top.right.traj.time.steplabel config -state disable
+    $w.top.right.traj.time.stepval config -state disable
+  }
 }
 
 proc ::RMSDTT::ctrltraj {} {
   variable w
   variable frames_sw
+  variable file_out_sw
   variable plot_sw
   variable rmsd_base
 
   if {$frames_sw} {
-    $w.top.right.file.plot config -state normal
-    $w.top.right.file.0 config -state normal
-    $w.top.right.file.name config -state normal
-    $w.top.right.frames.reflabel config -state normal
-    $w.top.right.frames.ref config -state normal
-    $w.top.right.switch.1 config -state disable
-    if {$rmsd_base == "ave"} {set rmsd_base "top"}
+    $w.top.right.traj.file.plot config -state normal
+    $w.top.right.traj.file.0 config -state normal
+    if {$file_out_sw} {
+      $w.top.right.traj.file.name config -state normal
+    } else {
+      $w.top.right.traj.file.name config -state disable
+    }
+    $w.top.right.traj.frames.reflabel config -state normal
+    $w.top.right.traj.frames.ref config -state normal
+    if {$rmsd_base == "ave"} {
+      $w.top.right.traj.frames.reflabel config -state disable
+      $w.top.right.traj.frames.ref config -state disable
+    } else {
+      $w.top.right.traj.frames.reflabel config -state normal
+      $w.top.right.traj.frames.ref config -state normal
+    }
+    $w.top.right.traj.time.0 config -state normal
+    $w.top.right.traj.time.inilabel config -state normal
+    $w.top.right.traj.time.inival config -state normal
+    $w.top.right.traj.time.steplabel config -state normal
+    $w.top.right.traj.time.stepval config -state normal
   } else {
-    $w.top.right.file.plot config -state disable
-    $w.top.right.file.0 config -state disable
-    $w.top.right.file.name config -state disable
-    $w.top.right.frames.reflabel config -state disable
-    $w.top.right.frames.ref config -state disable
-    $w.top.right.switch.1 config -state normal
+    $w.top.right.traj.file.plot config -state disable
+    $w.top.right.traj.file.0 config -state disable
+    $w.top.right.traj.file.name config -state disable
+    $w.top.right.traj.frames.reflabel config -state disable
+    $w.top.right.traj.frames.ref config -state disable
+    $w.top.right.traj.time.0 config -state disable
+    $w.top.right.traj.time.inilabel config -state disable
+    $w.top.right.traj.time.inival config -state disable
+    $w.top.right.traj.time.steplabel config -state disable
+    $w.top.right.traj.time.stepval config -state disable
   }
 }
 
@@ -675,6 +864,9 @@ proc ::RMSDTT::rmsdtt {} {
 
   variable frames_sw
   variable frame_ref
+  variable time_sw
+  variable time_ini
+  variable time_step
   variable file_out_sw
   variable file_out
   variable file_out_id
@@ -702,6 +894,9 @@ proc ::RMSDTT::rmsdtt {} {
 
   set frames_sw 1
   set frame_ref 0
+  set time_sw 1
+  set time_ini 0.0
+  set time_step 1.0
   set file_out_sw 0
   set file_out "trajrmsd.dat"
   set plot_sw 1
@@ -773,55 +968,87 @@ proc ::RMSDTT::rmsdtt {} {
   radiobutton $calc_top.right.switch.0 -highlightthickness 0 \
     -activebackground $calc_bgcol -bg $calc_bgcol \
     -fg $calc_fgcol -activeforeground $calc_fgcol \
-    -text {Top} -variable [namespace current]::rmsd_base -value "top"
+    -text {Top} -variable [namespace current]::rmsd_base -value "top" \
+    -command ::RMSDTT::ctrltraj
 
   radiobutton $calc_top.right.switch.1 -highlightthickness 0 \
     -activebackground $calc_bgcol -bg $calc_bgcol \
     -fg $calc_fgcol -activeforeground $calc_fgcol \
-    -text {Average} -variable [namespace current]::rmsd_base -value "ave"
+    -text {Average} -variable [namespace current]::rmsd_base -value "ave" \
+    -command ::RMSDTT::ctrltraj
 
   radiobutton $calc_top.right.switch.2 -highlightthickness 0 \
     -activebackground $calc_bgcol -bg $calc_bgcol \
     -fg $calc_fgcol -activeforeground $calc_fgcol \
-    -text {Selected} -variable [namespace current]::rmsd_base -value "selected"
+    -text {Selected} -variable [namespace current]::rmsd_base -value "selected" \
+    -command ::RMSDTT::ctrltraj
 
-  frame $calc_top.right.frames -bg $calc_bgcol -relief ridge -bd 4
+  # Trajectory part.
+  frame $calc_top.right.traj -bg $calc_bgcol -relief ridge -bd 4
 
-  checkbutton $calc_top.right.frames.0 -highlightthickness 0 \
+  frame $calc_top.right.traj.frames -bg $calc_bgcol -relief ridge -bd 0
+
+  checkbutton $calc_top.right.traj.frames.0 -highlightthickness 0 \
     -activebackground $calc_bgcol -bg $calc_bgcol \
     -fg $calc_fgcol -activeforeground $calc_fgcol \
     -text "Trajectory" -variable [namespace current]::frames_sw \
     -command ::RMSDTT::ctrltraj
 
-    label $calc_top.right.frames.reflabel -text "Frame ref:" \
+    label $calc_top.right.traj.frames.reflabel -text "Frame ref:" \
     -bg $calc_bgcol -fg $calc_fgcol \
     -padx 3 -pady 3
 
-  entry $calc_top.right.frames.ref -bd 0 -highlightthickness 0 -insertofftime 0 \
+  entry $calc_top.right.traj.frames.ref -bd 0 -highlightthickness 0 -insertofftime 0 \
     -bg $entry_bgcol -selectbackground $sel_bgcol -selectforeground $sel_fgcol \
     -selectborderwidth 0 -exportselection yes -width 5 \
     -textvariable [namespace current]::frame_ref
 
-  frame $calc_top.right.file -bg $calc_bgcol -relief ridge -bd 4
+  frame $calc_top.right.traj.time -bg $calc_bgcol -relief ridge -bd 0
 
-  checkbutton $calc_top.right.file.plot -highlightthickness 0 \
+  checkbutton $calc_top.right.traj.time.0 -highlightthickness 0 \
+    -activebackground $calc_bgcol -bg $calc_bgcol \
+    -fg $calc_fgcol -activeforeground $calc_fgcol \
+    -text "Time (ps)" -variable [namespace current]::time_sw \
+    -command ::RMSDTT::ctrltime
+
+    label $calc_top.right.traj.time.inilabel -text "Ini:" \
+    -bg $calc_bgcol -fg $calc_fgcol \
+    -padx 3 -pady 3
+
+  entry $calc_top.right.traj.time.inival -bd 0 -highlightthickness 0 -insertofftime 0 \
+    -bg $entry_bgcol -selectbackground $sel_bgcol -selectforeground $sel_fgcol \
+    -selectborderwidth 0 -exportselection yes -width 6 \
+    -textvariable [namespace current]::time_ini
+
+    label $calc_top.right.traj.time.steplabel -text "Step:" \
+    -bg $calc_bgcol -fg $calc_fgcol \
+    -padx 3 -pady 3
+
+  entry $calc_top.right.traj.time.stepval -bd 0 -highlightthickness 0 -insertofftime 0 \
+    -bg $entry_bgcol -selectbackground $sel_bgcol -selectforeground $sel_fgcol \
+    -selectborderwidth 0 -exportselection yes -width 6 \
+    -textvariable [namespace current]::time_step
+
+  frame $calc_top.right.traj.file -bg $calc_bgcol -relief ridge -bd 0
+
+  checkbutton $calc_top.right.traj.file.plot -highlightthickness 0 \
     -activebackground $calc_bgcol -bg $calc_bgcol \
     -fg $calc_fgcol -activeforeground $calc_fgcol \
     -text "Plot" -variable [namespace current]::plot_sw
 
-  checkbutton $calc_top.right.file.0 -highlightthickness 0 \
+  checkbutton $calc_top.right.traj.file.0 -highlightthickness 0 \
     -activebackground $calc_bgcol -bg $calc_bgcol \
     -fg $calc_fgcol -activeforeground $calc_fgcol \
     -text "Save to file:" -variable [namespace current]::file_out_sw \
     -command [namespace code {
       if {$file_out_sw} {
-	$w.top.right.file.name config -state normal
+	$w.top.right.traj.file.name config -state normal
       } else {
-	$w.top.right.file.name config -state disable
+	$w.top.right.traj.file.name config -state disable
       }
     }]
 
-  entry $calc_top.right.file.name -bd 0 -highlightthickness 0 -insertofftime 0 \
+  entry $calc_top.right.traj.file.name -bd 0 -highlightthickness 0 -insertofftime 0 \
     -bg $entry_bgcol -selectbackground $sel_bgcol -selectforeground $sel_fgcol \
     -selectborderwidth 0 -exportselection yes -width 15 \
     -textvariable [namespace current]::file_out -state disable
@@ -848,11 +1075,18 @@ proc ::RMSDTT::rmsdtt {} {
   #pack $calc_top.right.switch.frame -side top -fill both
   pack $calc_top.right.switch.0 $calc_top.right.switch.1 $calc_top.right.switch.2\
     -side left -fill both -padx 2 -pady 2
-  pack $calc_top.right.frames -side top -fill both
-  pack $calc_top.right.frames.0 $calc_top.right.frames.reflabel $calc_top.right.frames.ref\
+
+  ### ...trajectory...
+  pack $calc_top.right.traj -side top -fill both
+  pack $calc_top.right.traj.frames -side top -fill both
+  pack $calc_top.right.traj.frames.0 $calc_top.right.traj.frames.reflabel $calc_top.right.traj.frames.ref\
     -side left -fill both -padx 2 -pady 2
-  pack $calc_top.right.file -side top -fill both
-  pack $calc_top.right.file.plot $calc_top.right.file.0 $calc_top.right.file.name\
+  pack $calc_top.right.traj.time -side top -fill both
+  pack $calc_top.right.traj.time.0 $calc_top.right.traj.time.inilabel $calc_top.right.traj.time.inival\
+    $calc_top.right.traj.time.steplabel $calc_top.right.traj.time.stepval\
+    -side left -fill both -padx 2 -pady 2
+  pack $calc_top.right.traj.file -side top -fill both
+  pack $calc_top.right.traj.file.plot $calc_top.right.traj.file.0 $calc_top.right.traj.file.name\
     -side left -fill both -padx 2 -pady 2
 
 
