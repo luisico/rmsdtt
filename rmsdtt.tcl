@@ -35,14 +35,15 @@ namespace eval ::RMSDTT:: {
   variable rms_ave                   ;# array of rms ave
   variable rms_list                  ;# list of rms values
   variable pdb_list                  ;# list of pdb files
-  variable bb_only                   ;# backbon-only settings
+  variable bb_only                   ;# backbon-only settings (C CA N)
+  variable trace_only                ;# Trace settings
   variable rms_sel                   ;# rms selection text
   variable rmsd_base                 ;# which molecule is the reference for rmsd calc.
   variable tot_rms                   ;# total rms value 
   variable RMSDhistory				 ;# history of selections
   variable rms_values
   
-	option add *Font {Helvetica -12}
+  option add *Font {Helvetica -12}
   # Original color scheme by Alexander/Pascal
   #  variable ftr_bgcol   \#2a4
   #  variable ftr_fgcol   \#ff0
@@ -211,13 +212,31 @@ proc ::RMSDTT::compute_rms {base sel_text frame_ref} {
   # and if the top molecule is part of the listed pdbs
   # or the selected item in the pdb list, see below
     
+  if {$sel_text == ""} {
+    ::RMSDTT::showMessage "Selection is empty selection!"
+    return -code return
+  }
+
   foreach i $all_mols {
     set jmax [molinfo $i get numframes]
+    set natoms($i) [[atomselect $i $sel_text frame 0] num]
     for {set j 0} {$j < $jmax} {incr j} {
       set all_coor($i,$j) [[atomselect $i $sel_text frame $j] get {x y z}]
     }
   }
-    
+  
+  # Check same number of atoms
+  foreach i $all_mols {
+    foreach j $all_mols {
+      if {$i < $j} {
+	if {$natoms($i) != $natoms($j)} {
+	  ::RMSDTT::showMessage "Selections differ for molecules $i ($natoms($i)) and $j ($natoms($j))"
+	  return -code return
+	}
+      }
+    }
+  }
+  
   # do the top molecule as well, just in case it's not in the pdb list and is selected for RMSD calculation
   set jmax [molinfo $mol_on_top get numframes]
   for {set j 0} {$j < $jmax} {incr j} {
@@ -232,10 +251,9 @@ proc ::RMSDTT::compute_rms {base sel_text frame_ref} {
       } else {
 	set j $frame_ref
 	set n0 [molinfo $mol_ref get numframes]
-	if {$n0 == 1 && $j != 0} {
-	  bell
-	  puts "Frame ref out of range"
-	  return
+	if {$frame_ref >= $n0} {
+	  ::RMSDTT::showMessage "Frame ref out of range (max is $n0)"
+	  return -code return
 	}
       }
       set ave_coor $all_coor($mol_on_top,$j)
@@ -271,10 +289,9 @@ proc ::RMSDTT::compute_rms {base sel_text frame_ref} {
       } else {
 	set j $frame_ref
 	set n0 [molinfo $mol_ref get numframes]
-	if {$n0 == 1 && $j != 0} {
-	  bell
-	  puts "Frame ref out of range"
-	  return
+	if {$frame_ref >= $n0} {
+	  ::RMSDTT::showMessage "Frame ref out of range (max is $n0)"
+	  return -code return
 	}
       }
       set ave_coor $all_coor($index,$j) 
@@ -301,9 +318,8 @@ proc ::RMSDTT::compute_rms {base sel_text frame_ref} {
 	set r [expr $r + [veclength2 [vecsub $v1 $v2]]]
       }
       if {$len < 1} {
-	bell
-	puts "Empty selection, check the selection \"$sel_text\""
-	return
+	::RMSDTT::showMessage "Selection \"$sel_text\" match no atom"
+	return -code return
       }
       set r [expr $r/$len]
       set r [expr sqrt($r)]
@@ -343,12 +359,21 @@ proc ::RMSDTT::reveal_rms {} {
 
 
 proc ::RMSDTT::two_scroll args {
-	variable pdb_list 
-	variable rms_list
-	eval "$pdb_list yview $args"
-	eval "$rms_list yview $args"
+  variable pdb_list 
+  variable rms_list
+  eval "$pdb_list yview $args"
+  eval "$rms_list yview $args"
 }
 
+
+proc ::RMSDTT::onlyactive args {
+  variable pdb_list 
+  $pdb_list delete 0 end
+  for {set i 0} {$i < [molinfo num]} {incr i} {
+    set molid [molinfo index $i]
+    if {[molinfo $molid get active]} {$pdb_list insert end [format "%-4s%-10s" $molid [molinfo $molid get name]]}      
+  }
+}
 
 
 # This gets called by VMD the first time the menu is opened.
@@ -363,6 +388,29 @@ proc rmsdtt_tk_cb {} {
   return $RMSDTT::w
 }
 
+proc RMSDTT::showMessage {mess} {
+  bell
+  toplevel .messpop 
+  grab .messpop
+  option add *Font {Helvetica -12 bold}
+  wm title .messpop "Warning"
+    message .messpop.msg -relief groove -bd 2 -text $mess -aspect 400 -justify center -padx 20 -pady 20
+  
+  button .messpop.okb -text OK -command {destroy .messpop ; return 0}
+  pack .messpop.msg .messpop.okb -side top 
+}
+
+
+proc RMSDTT::set_sel {} {
+  variable w
+#  set a [$w.top.left.inner.selfr.sel get 1.0 end]
+#  puts "a <$a>"
+  regsub -all "\#.*?\n" [$w.top.left.inner.selfr.sel get 1.0 end] "" temp1
+  regsub -all "\n" $temp1 " " temp
+  regsub -all " $" $temp "" rms_sel
+#  puts "c <$rms_sel>"
+  return $rms_sel
+}
 
 proc RMSDTT::ListHisotryPullDownMenu {} {
   variable RMSDhistory
@@ -386,12 +434,6 @@ proc ::RMSDTT::saveData {} {
   variable file_out
   variable file_out_sw
   
-  if {$file_out == ""} {
-    bell
-    puts "Filename is missing!"
-    return
-  }
-
   set file_out_id [open $file_out w]
   fconfigure $file_out_id -buffering line
 
@@ -470,8 +512,68 @@ proc ::RMSDTT::tempfile {prefix suffix} {
   }
 }
 
+proc ::RMSDTT::doRmsd {} {
+  variable w
+  variable bb_only
+  variable trace_only
+  variable rmsd_base
+  variable rms_sel
+  variable frame_ref
+  variable frames_sw
+  variable file_out_sw
+  variable file_out
+  variable plot_sw
+  variable RMSDhistory
+
+
+  if {$frames_sw && $file_out_sw && $file_out == ""} {
+    ::RMSDTT::showMessage "Filename is missing!"
+    return -code return
+  }
+
+  set rms_sel [::RMSDTT::set_sel]
+  if { $trace_only } {
+    set tot_rms [::RMSDTT::compute_rms $rmsd_base [concat "(" $rms_sel ") and name CA"] $frame_ref] 
+  } elseif { $bb_only } {
+    set tot_rms [::RMSDTT::compute_rms $rmsd_base [concat "(" $rms_sel ") and name C CA N"] $frame_ref] 
+  } else {
+    set tot_rms [::RMSDTT::compute_rms $rmsd_base $rms_sel $frame_ref]
+  }
+  ::RMSDTT::reveal_rms
+  lappend RMSDhistory $rms_sel
+  ::RMSDTT::ListHisotryPullDownMenu
+  if {$frames_sw} {
+    if {$file_out_sw} {::RMSDTT::saveData}
+    if {$plot_sw} {::RMSDTT::doPlot}
+  }
+}
+
+proc ::RMSDTT::doAlign {} {
+  variable w
+  variable bb_only
+  variable trace_only
+  variable rmsd_base
+  variable rms_sel
+  variable frame_ref
+  
+  set rms_sel [::RMSDTT::set_sel]
+  if {$rmsd_base=="ave"} {
+    ::RMSDTT::showMessage "Average option not available for Alignment in this version"
+    return -code return
+  }
+  if { $trace_only } {
+    set arg1  [concat "(" $rms_sel ") and name CA"]
+  } elseif { $bb_only } {
+    set arg1  [concat "(" $rms_sel ") and name C CA N"] 
+  } else {
+    set arg1 $rms_sel 
+  }
+  ::RMSDTT::align_all $arg1 $rmsd_base $frame_ref
+}
+
 proc ::RMSDTT::doPlot {} {
   variable rms_values
+  variable rms_sel
 
   set all_mols [get_molid_from_pdb_list_to_operate_on]
   set n_mols [llength $all_mols]
@@ -489,7 +591,7 @@ proc ::RMSDTT::doPlot {} {
   puts $pipe_id "@ g0 on"
   puts $pipe_id "@ with g0"
   puts $pipe_id "@ title \"Rmsd vs Frame\""
-  puts $pipe_id "@ subtitle \"Created with the rmsdtt VMD plugin\""
+  puts $pipe_id "@ subtitle \"$rms_sel\""
   puts $pipe_id "@ xaxis  label \"Frame\""
   puts $pipe_id "@ yaxis  label \"Rmsd (A)\""
   puts $pipe_id "@ TYPE xy"
@@ -518,9 +620,9 @@ proc ::RMSDTT::doPlot {} {
   close $pipe_id
   set status [catch {exec xmgrace $filename &} msg]
   if { $status } {
-    bell
-    puts "Could not open xmagrace: $msg"
+    ::RMSDTT::showMessage "Could not open xmgrace. Error returned:\n $msg"
     file delete -force $filename
+    return -code return
   } 
 }
 
@@ -548,9 +650,23 @@ proc ::RMSDTT::ctrltraj {} {
   }
 }
 
+proc ::RMSDTT::ctrlbb { obj } {
+  variable w
+  variable bb_only
+  variable trace_only
+
+  if {$obj == "bb"} {
+    set trace_only 0
+  } elseif {$obj == "trace"} {
+    set bb_only 0
+  }
+}
+
+
 proc ::RMSDTT::rmsdtt {} {
   variable w ;# Tk window
   variable bb_only 
+  variable trace_only 
   variable pdb_list
   variable rms_ave 
   variable rms_list 
@@ -581,9 +697,9 @@ proc ::RMSDTT::rmsdtt {} {
   variable scr_trough 
 
   #  Set several parameters.
-  set bb_only 1
+  set bb_only 0
+  set trace_only 0
   set RMSDhistory ""
-  set rms_sel {residue 5 to 85}
   set rmsd_base {top}
   set tot_rms {}
 
@@ -615,23 +731,22 @@ proc ::RMSDTT::rmsdtt {} {
   set rc_win [frame $calc_top.left.inner -bg $calc_bgcol -bd 0]
   frame $rc_win.selfr -relief sunken -bd 4 -bg $calc_bgcol
 
-  entry $rc_win.selfr.sel -bd 0 -highlightthickness 0 -insertofftime 0 \
+  text $rc_win.selfr.sel -bd 0 -highlightthickness 0 -insertofftime 0 \
     -bg $entry_bgcol -selectbackground $sel_bgcol -selectforeground $sel_fgcol \
-    -selectborderwidth 0 -exportselection yes \
-    -textvariable [namespace current]::rms_sel
-
-
-	bind $rc_win.selfr.sel <Return> [namespace code {
-     lappend RMSDhistory [.rmsdtt.top.left.inner.selfr.sel get] 
-     ListHisotryPullDownMenu
-    } ]
-    
+    -selectborderwidth 0 -exportselection yes -height 5 -width 25 -wrap word
+   $rc_win.selfr.sel insert end {resid 5 to 85}
 
   checkbutton $rc_win.bb -highlightthickness 0 \
     -activebackground $calc_bgcol -bg $calc_bgcol \
     -fg $calc_fgcol -activeforeground $calc_fgcol \
-    -width 15 \
-    -text {Backbone only} -variable [namespace current]::bb_only
+    -text {Backbone} -variable [namespace current]::bb_only \
+    -command {::RMSDTT::ctrlbb bb}
+
+  checkbutton $rc_win.tr -highlightthickness 0 \
+    -activebackground $calc_bgcol -bg $calc_bgcol \
+    -fg $calc_fgcol -activeforeground $calc_fgcol \
+    -text {Trace} -variable [namespace current]::trace_only \
+   -command {::RMSDTT::ctrlbb trace}
 
   menubutton  $rc_win.selectionhistory \
         -menu $rc_win.selectionhistory.m -padx 5 -pady 4 \
@@ -648,32 +763,13 @@ proc ::RMSDTT::rmsdtt {} {
   button $calc_top.right.rmsd -relief raised -bd 4 -highlightthickness 0 -text {RMSD} \
     -activebackground $but_abgcol -bg $but_bgcol \
     -fg $calc_fgcol -activeforeground $calc_fgcol \
-    -command [namespace code {
-      if { $bb_only } {
-	set tot_rms [compute_rms $rmsd_base [concat "(" $rms_sel ") and backbone"] $frame_ref] 
-      } else {
-	set tot_rms [compute_rms $rmsd_base $rms_sel $frame_ref]
-      }
-      reveal_rms
-      if {$frames_sw} {
-	if {$file_out_sw} {::RMSDTT::saveData}
-	if {$plot_sw} {::RMSDTT::doPlot}
-      }
-    } ]
+    -command {::RMSDTT::doRmsd}
 
   
    button $calc_top.right.align -relief raised -bd 4 -highlightthickness 0 -text {Align} \
     -activebackground $act_bgcol -bg $but_bgcol \
     -activeforeground $act_fgcol -fg $ftr_fgcol  \
-    -command [namespace code {
-    if {$rmsd_base=="ave"} {bell;puts "you must choose Top or Selected for Alignment";return}
-    if { $bb_only } {
-          set arg1  [concat "(" $rms_sel ") and backbone"] 
-        } else {
-          set arg1 $rms_sel 
-        }
-        align_all $arg1 $rmsd_base $frame_ref
-      } ]
+    -command {::RMSDTT::doAlign}
   
   frame $calc_top.right.switch -bg $calc_bgcol -relief ridge -bd 4
 
@@ -742,6 +838,7 @@ proc ::RMSDTT::rmsdtt {} {
   pack $rc_win -side left -fill both -expand 1
   pack $rc_win.selfr -side top -fill both -expand 1 -padx 4 -pady 4
   pack $rc_win.bb -side left 
+  pack $rc_win.tr -side left 
   pack $rc_win.selectionhistory -side right
   pack $rc_win.selfr.sel -side top -fill both -expand 1
   pack $rc_win.selfr.sel -side top -fill both -expand 1
@@ -860,13 +957,7 @@ grid $calc_mid.titlebar.right -in $calc_mid.titlebar -column 1 -row 0 -columnspa
 
   button $w.bottom.onlyactive -relief raised -bd 4 -highlightthickness 0 -text {Only active} \
     -activebackground $but_abgcol -bg $but_bgcol \
-    -command [namespace code {
-        $pdb_list delete 0 end
-        for {set i 0} {$i<[molinfo num]} {incr i} {
-          set molid [molinfo index $i]
-          if {[molinfo $molid get active]} {$pdb_list insert end [format "%-4s%-10s" $molid [molinfo $molid get name]]}      
-        }
-      } ]
+    -command {RMSDTT::onlyactive}
 
   menubutton $w.bottom.assemblymenu \
         -menu $w.bottom.assemblymenu.m -padx 5 -pady 4 \
