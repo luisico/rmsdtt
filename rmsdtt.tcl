@@ -417,8 +417,8 @@ proc ::RMSDTT::saveData {} {
 #	puts [format " %10.7f" $rms_values($i,$j)]
 	puts -nonewline $file_out_id [format " %10.7f" $rms_values($i,$j)]
       } else {
-#	puts [format " %10s" {na}]
-	puts -nonewline $file_out_id [format " %10s" {na}]
+#	puts [format " %10s" {NA}]
+	puts -nonewline $file_out_id [format " %10s" {NA}]
       }
      }
      puts $file_out_id ""
@@ -482,7 +482,7 @@ proc ::RMSDTT::doPlot {} {
     puts "Could not open xmagrace: $msg"
   }
   
-  after 500 file delete -force $filename
+  after 1000 file delete -force $filename
 }
 
 proc ::RMSDTT::ctrltraj {} {
