@@ -554,6 +554,7 @@ proc ::RMSDTT::rmsdtt {} {
   set frame_ref 0
   set file_out_sw 0
   set file_out "trajrmsd.dat"
+  set plot_sw 1
 
 
   # If already initialized, just turn on
