@@ -403,12 +403,22 @@ proc RMSDTT::showMessage {mess} {
 
 proc RMSDTT::set_sel {} {
   variable w
+  variable bb_only
+  variable trace_only
+
 #  set a [$w.top.left.inner.selfr.sel get 1.0 end]
 #  puts "a <$a>"
   regsub -all "\#.*?\n" [$w.top.left.inner.selfr.sel get 1.0 end] "" temp1
-  regsub -all "\n" $temp1 " " temp
-  regsub -all " $" $temp "" rms_sel
+  regsub -all "\n" $temp1 " " temp2
+  regsub -all " $" $temp2 "" temp3
 #  puts "c <$rms_sel>"
+  if { $trace_only } {
+    append rms_sel "($temp3) and name CA"
+  } elseif { $bb_only } {
+    append rms_sel "($temp3) and name C CA N"
+  } else {
+    append rms_sel $temp3
+  }
   return $rms_sel
 }
 
@@ -532,13 +542,7 @@ proc ::RMSDTT::doRmsd {} {
   }
 
   set rms_sel [::RMSDTT::set_sel]
-  if { $trace_only } {
-    set tot_rms [::RMSDTT::compute_rms $rmsd_base [concat "(" $rms_sel ") and name CA"] $frame_ref] 
-  } elseif { $bb_only } {
-    set tot_rms [::RMSDTT::compute_rms $rmsd_base [concat "(" $rms_sel ") and name C CA N"] $frame_ref] 
-  } else {
-    set tot_rms [::RMSDTT::compute_rms $rmsd_base $rms_sel $frame_ref]
-  }
+  set tot_rms [::RMSDTT::compute_rms $rmsd_base $rms_sel $frame_ref]
   ::RMSDTT::reveal_rms
   lappend RMSDhistory $rms_sel
   ::RMSDTT::ListHisotryPullDownMenu
@@ -556,19 +560,12 @@ proc ::RMSDTT::doAlign {} {
   variable rms_sel
   variable frame_ref
   
-  set rms_sel [::RMSDTT::set_sel]
   if {$rmsd_base=="ave"} {
     ::RMSDTT::showMessage "Average option not available for Alignment in this version"
     return -code return
   }
-  if { $trace_only } {
-    set arg1  [concat "(" $rms_sel ") and name CA"]
-  } elseif { $bb_only } {
-    set arg1  [concat "(" $rms_sel ") and name C CA N"] 
-  } else {
-    set arg1 $rms_sel 
-  }
-  ::RMSDTT::align_all $arg1 $rmsd_base $frame_ref
+  set rms_sel [::RMSDTT::set_sel]
+  ::RMSDTT::align_all $rms_sel $rmsd_base $frame_ref
 }
 
 proc ::RMSDTT::doPlot {} {
