@@ -128,6 +128,7 @@ if { [catch "package require rmsdtt" msg] } {
 }
 </PRE>
 <P>Remember to correct the path to your plugins directory; i.e, if you saved the plugin in <EM>/home/user/myplugins</EM>, write that same path in the <EM>auto_path</EM> line.
+<P><B>Note:</B>If you created the <EM>.vmdrc</EM> file, remember to add <B><EM>menu main on</EM></B> to get the main menu back.</P>
 
 <LI><B>Excel on Windows</B> needs the <EM>tcom tcl library</EM>. Skip this step if you use unix. <A HREF="http://www.vex.net/~cthuang/tcom/">Download</A> the library and install it (i.e. in your plugins directories). In general, only the <EM>tcom/lib/tcom</EM> directory is needed. Then add the following to your vmd.rc file:
 <PRE>
