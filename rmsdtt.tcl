@@ -109,7 +109,7 @@ proc ::RMSDTT::align { sel1 thisframe sel2} {
 }
 
 
-proc ::RMSDTT::align_all {sel_text rmsd_base frame_ref} {
+proc ::RMSDTT::align_all {sel_text rmsd_base frames_ref} {
   variable pdb_list
   variable frames_sw
   set all_mols [get_molid_from_pdb_list_to_operate_on]
@@ -125,7 +125,7 @@ proc ::RMSDTT::align_all {sel_text rmsd_base frame_ref} {
     selected {set reference_for_alignment [lindex [$pdb_list get active] 0]}
   }
 
-  set sel_ref [atomselect $reference_for_alignment $sel_text frame $frame_ref]
+  set sel_ref [atomselect $reference_for_alignment $sel_text frame $frames_ref]
 
   foreach i $all_mols  {
     if {$frames_sw == 0} {
@@ -136,7 +136,7 @@ proc ::RMSDTT::align_all {sel_text rmsd_base frame_ref} {
     } else {
       set jmax [molinfo $i get numframes]
       for {set j 0} {$j < $jmax} {incr j} {
-	if { $i == $reference_for_alignment && $j == $frame_ref } {
+	if { $i == $reference_for_alignment && $j == $frames_ref } {
 	} else {
   	  align $sel($i) $j $sel_ref
 	}
@@ -188,14 +188,17 @@ proc ::RMSDTT::ave_struc {sel_text} {
 }
 
 
-proc ::RMSDTT::compute_rms {base sel_text frame_ref} {
+proc ::RMSDTT::compute_rms {sel_text {frames_ref 0}} {
   variable rms_ave 
   variable rms_disp 
   variable pdb_list
   variable rms_values
-
+  variable rmsd_base
+  
   variable frames_sw
+  variable frames_all
   variable rms_aveframe
+  # delete this variable mol_ref?
   variable mol_ref
 
   set all_mols [get_molid_from_pdb_list_to_operate_on]
@@ -239,16 +242,16 @@ proc ::RMSDTT::compute_rms {base sel_text frame_ref} {
   }
     
   
-  switch $base {
+  switch $rmsd_base {
     top {
       set mol_ref $mol_on_top
       if {$frames_sw == 0} {
-	set frame_ref [molinfo $mol_ref get frame]
+	set frames_ref [molinfo $mol_ref get frame]
       } else {
-	set j $frame_ref
+	set j $frames_ref
 	set n0 [molinfo $mol_ref get numframes]
-	if {$frame_ref >= $n0} {
-	  ::RMSDTT::showMessage "Frame ref out of range (max is $n0)"
+	if {$frames_ref >= $n0} {
+	  ::RMSDTT::showMessage "Frame ref out of range (max is [expr $n0-1])"
 	  return -code return
 	}
       }
@@ -295,10 +298,10 @@ proc ::RMSDTT::compute_rms {base sel_text frame_ref} {
 	incr n_mols -1
 	set j [molinfo $index get frame]
       } else {
-	set j $frame_ref
+	set j $frames_ref
 	set n0 [molinfo $mol_ref get numframes]
-	if {$frame_ref >= $n0} {
-	  ::RMSDTT::showMessage "Frame ref out of range (max is $n0)"
+	if {$frames_ref >= $n0} {
+	  ::RMSDTT::showMessage "Frame ref out of range (max is [expr $n0-1])"
 	  return -code return
 	}
       }
@@ -317,10 +320,10 @@ proc ::RMSDTT::compute_rms {base sel_text frame_ref} {
     # for each frame
     for {set j 0} {$j < $jmax} {incr j} {
       if {$frames_sw == 0} {set j [molinfo $i get frame]}
-      if {$base == "ave"} {
+      if {$rmsd_base == "ave"} {
 	set rmsd [get_rmsd_ave $ref_coor $i $j $sel_text]
       } else {
-	set rmsd [get_rmsd $mol_ref $frame_ref $i $j $sel_text]
+	set rmsd [get_rmsd $mol_ref $frames_ref $i $j $sel_text]
       }
       set rms_values($i,$j) $rmsd
       set rms_ave($i) [expr $rms_ave($i) + $rmsd]
@@ -457,10 +460,41 @@ proc ::RMSDTT::chooseHistoryItem {sel} {
 }
 
 
+proc ::RMSDTT::saveDataAll {frame_ref file_out_id time_ref} {
+  variable rms_values
+  variable time_sw
+  variable time_ini
+  variable time_step
+
+  set all_mols [get_molid_from_pdb_list_to_operate_on]
+  set n_mols [llength $all_mols]
+  
+  if {$n_mols > 1} {
+    foreach i $all_mols {
+      set nframes [molinfo $i get numframes]
+      for {set j 0} {$j < $nframes} {incr j} {
+	if {$time_sw} {
+	  set time [expr $time_ini + $time_step * $j]
+	  puts $file_out_id [format "%8.2f\t%3d\t%8.2f\t%10.7f" $frame_ref $i $time $rms_values($i,$j)]
+	} else {
+	  puts $file_out_id [format "%5d\t%3d\t%5d\t%10.7f" $frame_ref $i $j $rms_values($i,$j)]
+	}
+      }
+    }
+  } else {
+    set nframes [molinfo $all_mols get numframes]
+    for {set j 0} {$j < $nframes} {incr j} {
+      puts -nonewline $file_out_id [format "%6.2f " $rms_values($all_mols,$j)]
+    }
+    puts $file_out_id ""
+  }
+  
+}
+
+
 proc ::RMSDTT::saveData {} {
   variable rms_values
   variable file_out
-  variable file_out_sw
   variable time_sw
   variable time_ini
   variable time_step
@@ -484,13 +518,10 @@ proc ::RMSDTT::saveData {} {
   }
   puts $file_out_id ""
   
-  if {$time_sw} {
-    set time $time_ini
-  }
   for {set j 0} {$j < $jmaxmax} {incr j} {
     if {$time_sw} {
+      set time [expr $time_ini + $time_step * $j]
       puts -nonewline $file_out_id [format "%8.2f" $time]
-      set time [expr $time + $time_step]
     } else {
       puts -nonewline $file_out_id [format "%5d" $j]
     }
@@ -560,13 +591,18 @@ proc ::RMSDTT::doRmsd {} {
   variable trace_only
   variable rmsd_base
   variable rms_sel
-  variable frame_ref
   variable frames_sw
+  variable frames_all
+  variable frames_ref
   variable file_out_sw
   variable file_out
   variable plot_sw
   variable RMSDhistory
   variable tot_rms
+  variable rms_values
+  variable time_sw
+  variable time_ini
+  variable time_step
 
   if {$frames_sw && $file_out_sw && $file_out == ""} {
     ::RMSDTT::showMessage "Filename is missing!"
@@ -574,14 +610,63 @@ proc ::RMSDTT::doRmsd {} {
   }
 
   set rms_sel [::RMSDTT::set_sel]
-  set tot_rms [::RMSDTT::compute_rms $rmsd_base $rms_sel $frame_ref]
-  ::RMSDTT::reveal_rms
+
+  if {$frames_all} {
+    switch $rmsd_base {
+      top {
+	set mol_ref [molinfo top]
+	set nframes [molinfo $mol_ref get numframes]
+      }
+      ave {
+	set mol_ref "ave"
+	set nframes [molinfo [molinfo top] get numframes]
+      }
+      selected {
+	set index [lindex [$pdb_list get active] 0]
+	set mol_ref $index
+	set nframes [molinfo $mol_ref get numframes]
+      }
+    }
+    set all_mols [get_molid_from_pdb_list_to_operate_on]
+    set n_mols [llength $all_mols]
+    if {$frames_sw && $file_out_sw} {
+      set file_out_id [open $file_out w]
+      fconfigure $file_out_id -buffering line
+      if {$n_mols > 1} {
+	if {$time_sw} {
+	  puts $file_out_id "time_ref mol\ttime\trmsd"
+	} else {
+	  puts $file_out_id "frame_ref mol\tframe\trmsd"
+	}
+      }
+    }
+    for {set k 0} {$k < $nframes} {incr k} {
+      set tot_rms [::RMSDTT::compute_rms $rms_sel $k]
+      if {$frames_sw} {
+	if {$file_out_sw} {
+	  set time_ref [expr $time_ini + $time_step * $k]
+	  ::RMSDTT::saveDataAll $k $file_out_id $time_ref
+	}
+	#if {$n_mols == 1} {
+	#  if {$plot_sw} {::RMSDTT::doPlotAll}
+	#}
+      }
+      
+    }
+    if {$frames_sw && $file_out_sw} {
+      close $file_out_id
+    }
+    
+  } else {
+    set tot_rms [::RMSDTT::compute_rms $rms_sel $frames_ref]
+    ::RMSDTT::reveal_rms
+    if {$frames_sw} {
+      if {$file_out_sw} {::RMSDTT::saveData}
+      if {$plot_sw} {::RMSDTT::doPlot}
+    }
+  }
   lappend RMSDhistory $rms_sel
   ::RMSDTT::ListHisotryPullDownMenu
-  if {$frames_sw} {
-    if {$file_out_sw} {::RMSDTT::saveData}
-    if {$plot_sw} {::RMSDTT::doPlot}
-  }
 }
 
 proc ::RMSDTT::doAlign {} {
@@ -590,14 +675,14 @@ proc ::RMSDTT::doAlign {} {
   variable trace_only
   variable rmsd_base
   variable rms_sel
-  variable frame_ref
+  variable frames_ref
   
   if {$rmsd_base=="ave"} {
     ::RMSDTT::showMessage "Average option not available for Alignment in this version"
     return -code return
   }
   set rms_sel [::RMSDTT::set_sel]
-  ::RMSDTT::align_all $rms_sel $rmsd_base $frame_ref
+  ::RMSDTT::align_all $rms_sel $rmsd_base $frames_ref
 }
 
 proc ::RMSDTT::doPlot {} {
@@ -645,13 +730,10 @@ proc ::RMSDTT::doPlot {} {
 	if {$jmax == 1} {
 	  puts $pipe_id "@ s$k symbol 1"
 	}
-	if {$time_sw} {
-	  set time $time_ini
-	}
 	for {set j 0} {$j < $jmax} {incr j} {
 	  if {$time_sw} {
+	    set time [expr $time_ini + $time_step * $j]
 	    puts $pipe_id "$time $rms_values($i,$j)"
-	    set time [expr $time + $time_step]
 	  } else {
 	    puts $pipe_id "$j $rms_values($i,$j)"
 	  }
@@ -779,8 +861,9 @@ proc a-z {} {list a b c d e f g h i j k l m n o p q r s t u v w x y z}
 
 proc ::RMSDTT::ctrltime {} {
   variable w
+  variable frames_sw
   variable time_sw
-  if {$time_sw} {
+  if {$time_sw && $frames_sw} {
     $w.top.right.traj.time.inilabel config -state normal
     $w.top.right.traj.time.inival config -state normal
     $w.top.right.traj.time.steplabel config -state normal
@@ -796,44 +879,47 @@ proc ::RMSDTT::ctrltime {} {
 proc ::RMSDTT::ctrltraj {} {
   variable w
   variable frames_sw
+  variable frames_all
   variable file_out_sw
   variable plot_sw
   variable rmsd_base
 
   if {$frames_sw} {
-    $w.top.right.traj.file.plot config -state normal
+    if {$frames_all} {
+      $w.top.right.traj.file.plot config -state disable
+    } else {
+      $w.top.right.traj.file.plot config -state normal
+    }
     $w.top.right.traj.file.0 config -state normal
     if {$file_out_sw} {
       $w.top.right.traj.file.name config -state normal
     } else {
       $w.top.right.traj.file.name config -state disable
     }
-    $w.top.right.traj.frames.reflabel config -state normal
-    $w.top.right.traj.frames.ref config -state normal
     if {$rmsd_base == "ave"} {
       $w.top.right.traj.frames.reflabel config -state disable
+      $w.top.right.traj.frames.all config -state disable
       $w.top.right.traj.frames.ref config -state disable
     } else {
       $w.top.right.traj.frames.reflabel config -state normal
-      $w.top.right.traj.frames.ref config -state normal
+      $w.top.right.traj.frames.all config -state normal
+      if {$frames_all} {
+	$w.top.right.traj.frames.ref config -state disable
+      } else {
+	$w.top.right.traj.frames.ref config -state normal
+      }
     }
     $w.top.right.traj.time.0 config -state normal
-    $w.top.right.traj.time.inilabel config -state normal
-    $w.top.right.traj.time.inival config -state normal
-    $w.top.right.traj.time.steplabel config -state normal
-    $w.top.right.traj.time.stepval config -state normal
   } else {
     $w.top.right.traj.file.plot config -state disable
     $w.top.right.traj.file.0 config -state disable
     $w.top.right.traj.file.name config -state disable
     $w.top.right.traj.frames.reflabel config -state disable
+    $w.top.right.traj.frames.all config -state disable
     $w.top.right.traj.frames.ref config -state disable
     $w.top.right.traj.time.0 config -state disable
-    $w.top.right.traj.time.inilabel config -state disable
-    $w.top.right.traj.time.inival config -state disable
-    $w.top.right.traj.time.steplabel config -state disable
-    $w.top.right.traj.time.stepval config -state disable
   }
+  ::RMSDTT::ctrltime
 }
 
 proc ::RMSDTT::ctrlbb { obj } {
@@ -863,7 +949,8 @@ proc ::RMSDTT::rmsdtt {} {
   variable RMSDhistory
 
   variable frames_sw
-  variable frame_ref
+  variable frames_ref
+  variable frames_all
   variable time_sw
   variable time_ini
   variable time_step
@@ -893,8 +980,9 @@ proc ::RMSDTT::rmsdtt {} {
   set tot_rms {}
 
   set frames_sw 1
-  set frame_ref 0
-  set time_sw 1
+  set frames_ref 0
+  set frames_all 0
+  set time_sw 0
   set time_ini 0.0
   set time_step 1.0
   set file_out_sw 0
@@ -1001,7 +1089,14 @@ proc ::RMSDTT::rmsdtt {} {
   entry $calc_top.right.traj.frames.ref -bd 0 -highlightthickness 0 -insertofftime 0 \
     -bg $entry_bgcol -selectbackground $sel_bgcol -selectforeground $sel_fgcol \
     -selectborderwidth 0 -exportselection yes -width 5 \
-    -textvariable [namespace current]::frame_ref
+    -textvariable [namespace current]::frames_ref
+
+  checkbutton $calc_top.right.traj.frames.all -highlightthickness 0 \
+    -activebackground $calc_bgcol -bg $calc_bgcol \
+    -fg $calc_fgcol -activeforeground $calc_fgcol \
+    -text "All" -variable [namespace current]::frames_all \
+    -command ::RMSDTT::ctrltraj
+  
 
   frame $calc_top.right.traj.time -bg $calc_bgcol -relief ridge -bd 0
 
@@ -1079,7 +1174,7 @@ proc ::RMSDTT::rmsdtt {} {
   ### ...trajectory...
   pack $calc_top.right.traj -side top -fill both
   pack $calc_top.right.traj.frames -side top -fill both
-  pack $calc_top.right.traj.frames.0 $calc_top.right.traj.frames.reflabel $calc_top.right.traj.frames.ref\
+  pack $calc_top.right.traj.frames.0 $calc_top.right.traj.frames.reflabel $calc_top.right.traj.frames.ref $calc_top.right.traj.frames.all\
     -side left -fill both -padx 2 -pady 2
   pack $calc_top.right.traj.time -side top -fill both
   pack $calc_top.right.traj.time.0 $calc_top.right.traj.time.inilabel $calc_top.right.traj.time.inival\
@@ -1221,7 +1316,7 @@ grid $calc_mid.titlebar.right -in $calc_mid.titlebar -column 1 -row 0 -columnspa
 
 # update the History menu
  RMSDTT::ListHisotryPullDownMenu
- 
+ ::RMSDTT::ctrltime
 
 }
   
