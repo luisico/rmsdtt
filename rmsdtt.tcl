@@ -524,7 +524,7 @@ proc ::RMSDTT::doRmsd {} {
   variable file_out
   variable plot_sw
   variable RMSDhistory
-
+  variable tot_rms
 
   if {$frames_sw && $file_out_sw && $file_out == ""} {
     ::RMSDTT::showMessage "Filename is missing!"
@@ -822,7 +822,6 @@ proc ::RMSDTT::rmsdtt {} {
       } else {
 	$w.top.right.file.name config -state disable
       }
-      puts "$file_out_sw"
     }]
 
   entry $calc_top.right.file.name -bd 0 -highlightthickness 0 -insertofftime 0 \
