@@ -37,6 +37,7 @@ namespace eval ::RMSDTT:: {
   variable pdb_list                  ;# list of pdb files
   variable bb_only                   ;# backbon-only settings (C CA N)
   variable trace_only                ;# Trace settings
+  variable noh                       ;# No hydrogens
   variable rms_sel                   ;# rms selection text
   variable rmsd_base                 ;# which molecule is the reference for rmsd calc.
   variable tot_rms                   ;# total rms value 
@@ -209,7 +210,7 @@ proc ::RMSDTT::compute_rms {sel_text {frames_ref 0}} {
   # or the selected item in the pdb list, see below
     
   if {$sel_text == ""} {
-    ::RMSDTT::showMessage "Selection is empty selection!"
+    showMessage "Selection is empty selection!"
     return -code return
   }
 
@@ -224,7 +225,7 @@ proc ::RMSDTT::compute_rms {sel_text {frames_ref 0}} {
     foreach j $all_mols {
       if {$i < $j} {
 	if {$natoms($i) != $natoms($j)} {
-	  ::RMSDTT::showMessage "Selections differ for molecules $i ($natoms($i)) and $j ($natoms($j))"
+	  showMessage "Selections differ for molecules $i ($natoms($i)) and $j ($natoms($j))"
 	  return -code return
 	}
       }
@@ -235,7 +236,7 @@ proc ::RMSDTT::compute_rms {sel_text {frames_ref 0}} {
     set natomstop [[atomselect $mol_on_top $sel_text frame 0] num]
     foreach i $all_mols {
       if {$natoms($i) != $natomstop } {
-	::RMSDTT::showMessage "Selections differ for molecules $i ($natoms($i)) and top ($natomstop)"
+	showMessage "Selections differ for molecules $i ($natoms($i)) and top ($natomstop)"
 	return -code return
       }
     }
@@ -251,7 +252,7 @@ proc ::RMSDTT::compute_rms {sel_text {frames_ref 0}} {
 	set j $frames_ref
 	set n0 [molinfo $mol_ref get numframes]
 	if {$frames_ref >= $n0} {
-	  ::RMSDTT::showMessage "Frame ref out of range (max is [expr $n0-1])"
+	  showMessage "Frame ref out of range (max is [expr $n0-1])"
 	  return -code return
 	}
       }
@@ -301,7 +302,7 @@ proc ::RMSDTT::compute_rms {sel_text {frames_ref 0}} {
 	set j $frames_ref
 	set n0 [molinfo $mol_ref get numframes]
 	if {$frames_ref >= $n0} {
-	  ::RMSDTT::showMessage "Frame ref out of range (max is [expr $n0-1])"
+	  showMessage "Frame ref out of range (max is [expr $n0-1])"
 	  return -code return
 	}
       }
@@ -426,6 +427,7 @@ proc RMSDTT::set_sel {} {
   variable w
   variable bb_only
   variable trace_only
+  variable noh
 
 #  set a [$w.top.left.inner.selfr.sel get 1.0 end]
 #  puts "a <$a>"
@@ -439,6 +441,9 @@ proc RMSDTT::set_sel {} {
     append rms_sel "($temp3) and name C CA N"
   } else {
     append rms_sel $temp3
+  }
+  if { $noh } {
+    set rms_sel "($rms_sel) and noh"
   }
   return $rms_sel
 }
@@ -587,8 +592,6 @@ proc ::RMSDTT::tempfile {prefix suffix} {
 
 proc ::RMSDTT::doRmsd {} {
   variable w
-  variable bb_only
-  variable trace_only
   variable rmsd_base
   variable rms_sel
   variable frames_sw
@@ -605,11 +608,11 @@ proc ::RMSDTT::doRmsd {} {
   variable time_step
 
   if {$frames_sw && $file_out_sw && $file_out == ""} {
-    ::RMSDTT::showMessage "Filename is missing!"
+    showMessage "Filename is missing!"
     return -code return
   }
 
-  set rms_sel [::RMSDTT::set_sel]
+  set rms_sel [set_sel]
 
   if {$frames_all} {
     switch $rmsd_base {
@@ -641,14 +644,14 @@ proc ::RMSDTT::doRmsd {} {
       }
     }
     for {set k 0} {$k < $nframes} {incr k} {
-      set tot_rms [::RMSDTT::compute_rms $rms_sel $k]
+      set tot_rms [compute_rms $rms_sel $k]
       if {$frames_sw} {
 	if {$file_out_sw} {
 	  set time_ref [expr $time_ini + $time_step * $k]
-	  ::RMSDTT::saveDataAll $k $file_out_id $time_ref
+	  saveDataAll $k $file_out_id $time_ref
 	}
 	#if {$n_mols == 1} {
-	#  if {$plot_sw} {::RMSDTT::doPlotAll}
+	#  if {$plot_sw} {doPlotAll}
 	#}
       }
       
@@ -658,31 +661,29 @@ proc ::RMSDTT::doRmsd {} {
     }
     
   } else {
-    set tot_rms [::RMSDTT::compute_rms $rms_sel $frames_ref]
-    ::RMSDTT::reveal_rms
+    set tot_rms [compute_rms $rms_sel $frames_ref]
+    reveal_rms
     if {$frames_sw} {
-      if {$file_out_sw} {::RMSDTT::saveData}
-      if {$plot_sw} {::RMSDTT::doPlot}
+      if {$file_out_sw} {saveData}
+      if {$plot_sw} {doPlot}
     }
   }
   lappend RMSDhistory $rms_sel
-  ::RMSDTT::ListHisotryPullDownMenu
+  ListHisotryPullDownMenu
 }
 
 proc ::RMSDTT::doAlign {} {
   variable w
-  variable bb_only
-  variable trace_only
   variable rmsd_base
   variable rms_sel
   variable frames_ref
   
   if {$rmsd_base=="ave"} {
-    ::RMSDTT::showMessage "Average option not available for Alignment in this version"
+    showMessage "Average option not available for Alignment in this version"
     return -code return
   }
-  set rms_sel [::RMSDTT::set_sel]
-  ::RMSDTT::align_all $rms_sel $rmsd_base $frames_ref
+  set rms_sel [:set_sel]
+  align_all $rms_sel $rmsd_base $frames_ref
 }
 
 proc ::RMSDTT::doPlot {} {
@@ -701,7 +702,7 @@ proc ::RMSDTT::doPlot {} {
       # parray rms_values
       # set pipe_id [open "| xmgrace -pipe &" w]
       
-      set f [::RMSDTT::tempfile rmsdtt .tmp]
+      set f [tempfile rmsdtt .tmp]
       set filename [lindex $f 0]
       set pipe_id [lindex $f 1]
       fconfigure $pipe_id -buffering line
@@ -749,7 +750,7 @@ proc ::RMSDTT::doPlot {} {
       close $pipe_id
       set status [catch {exec xmgrace $filename &} msg]
       if { $status } {
-	::RMSDTT::showMessage "Could not open xmgrace. Error returned:\n $msg"
+	showMessage "Could not open xmgrace. Error returned:\n $msg"
 	file delete -force $filename
 	return -code return
       } 
@@ -804,7 +805,7 @@ proc ::RMSDTT::doPlot {} {
       set charts [$workbook Charts]
       set chart [$charts Add]
       $chart Name "RMSDTT graph"
-      set endrange [::RMSDTT::int2word $k]
+      set endrange [int2word $k]
       append endrange [expr $jmaxmax+2]
       $chart ChartWizard [$worksheet Range "A1" $endrange] -4169 [::tcom::na] 2 1 [expr $k-1] 1 "$exceltitle\n($rms_sel)"
       $chart ChartType 75
@@ -859,30 +860,14 @@ proc RMSDTT::int2word {int} {
 }
 proc a-z {} {list a b c d e f g h i j k l m n o p q r s t u v w x y z}
 
-proc ::RMSDTT::ctrltime {} {
-  variable w
-  variable frames_sw
-  variable time_sw
-  if {$time_sw && $frames_sw} {
-    $w.top.right.traj.time.inilabel config -state normal
-    $w.top.right.traj.time.inival config -state normal
-    $w.top.right.traj.time.steplabel config -state normal
-    $w.top.right.traj.time.stepval config -state normal
-  } else {
-    $w.top.right.traj.time.inilabel config -state disable
-    $w.top.right.traj.time.inival config -state disable
-    $w.top.right.traj.time.steplabel config -state disable
-    $w.top.right.traj.time.stepval config -state disable
-  }
-}
-
-proc ::RMSDTT::ctrltraj {} {
+proc ::RMSDTT::ctrlgui {} {
   variable w
   variable frames_sw
   variable frames_all
   variable file_out_sw
   variable plot_sw
   variable rmsd_base
+  variable time_sw
 
   if {$frames_sw} {
     if {$frames_all} {
@@ -919,8 +904,21 @@ proc ::RMSDTT::ctrltraj {} {
     $w.top.right.traj.frames.ref config -state disable
     $w.top.right.traj.time.0 config -state disable
   }
-  ::RMSDTT::ctrltime
+
+  if {$time_sw && $frames_sw} {
+    $w.top.right.traj.time.inilabel config -state normal
+    $w.top.right.traj.time.inival config -state normal
+    $w.top.right.traj.time.steplabel config -state normal
+    $w.top.right.traj.time.stepval config -state normal
+  } else {
+    $w.top.right.traj.time.inilabel config -state disable
+    $w.top.right.traj.time.inival config -state disable
+    $w.top.right.traj.time.steplabel config -state disable
+    $w.top.right.traj.time.stepval config -state disable
+  }
+
 }
+
 
 proc ::RMSDTT::ctrlbb { obj } {
   variable w
@@ -938,7 +936,8 @@ proc ::RMSDTT::ctrlbb { obj } {
 proc ::RMSDTT::rmsdtt {} {
   variable w ;# Tk window
   variable bb_only 
-  variable trace_only 
+  variable trace_only
+  variable noh
   variable pdb_list
   variable rms_ave 
   variable rms_list 
@@ -975,6 +974,7 @@ proc ::RMSDTT::rmsdtt {} {
   #  Set several parameters.
   set bb_only 0
   set trace_only 0
+  set noh 1
   set RMSDhistory ""
   set rmsd_base {top}
   set tot_rms {}
@@ -988,7 +988,6 @@ proc ::RMSDTT::rmsdtt {} {
   set file_out_sw 0
   set file_out "trajrmsd.dat"
   set plot_sw 1
-
 
   # If already initialized, just turn on
   if { [winfo exists .rmsdtt] } {
@@ -1028,6 +1027,11 @@ proc ::RMSDTT::rmsdtt {} {
     -text {Trace} -variable [namespace current]::trace_only \
    -command {::RMSDTT::ctrlbb trace}
 
+  checkbutton $rc_win.noh -highlightthickness 0 \
+    -activebackground $calc_bgcol -bg $calc_bgcol \
+    -fg $calc_fgcol -activeforeground $calc_fgcol \
+    -text {noh} -variable [namespace current]::noh
+
   menubutton  $rc_win.selectionhistory \
         -menu $rc_win.selectionhistory.m -padx 5 -pady 4 \
         -text {History} -relief raised \
@@ -1057,19 +1061,19 @@ proc ::RMSDTT::rmsdtt {} {
     -activebackground $calc_bgcol -bg $calc_bgcol \
     -fg $calc_fgcol -activeforeground $calc_fgcol \
     -text {Top} -variable [namespace current]::rmsd_base -value "top" \
-    -command ::RMSDTT::ctrltraj
+    -command ::RMSDTT::ctrlgui
 
   radiobutton $calc_top.right.switch.1 -highlightthickness 0 \
     -activebackground $calc_bgcol -bg $calc_bgcol \
     -fg $calc_fgcol -activeforeground $calc_fgcol \
     -text {Average} -variable [namespace current]::rmsd_base -value "ave" \
-    -command ::RMSDTT::ctrltraj
+    -command ::RMSDTT::ctrlgui
 
   radiobutton $calc_top.right.switch.2 -highlightthickness 0 \
     -activebackground $calc_bgcol -bg $calc_bgcol \
     -fg $calc_fgcol -activeforeground $calc_fgcol \
     -text {Selected} -variable [namespace current]::rmsd_base -value "selected" \
-    -command ::RMSDTT::ctrltraj
+    -command ::RMSDTT::ctrlgui
 
   # Trajectory part.
   frame $calc_top.right.traj -bg $calc_bgcol -relief ridge -bd 4
@@ -1080,9 +1084,9 @@ proc ::RMSDTT::rmsdtt {} {
     -activebackground $calc_bgcol -bg $calc_bgcol \
     -fg $calc_fgcol -activeforeground $calc_fgcol \
     -text "Trajectory" -variable [namespace current]::frames_sw \
-    -command ::RMSDTT::ctrltraj
+    -command ::RMSDTT::ctrlgui
 
-    label $calc_top.right.traj.frames.reflabel -text "Frame ref:" \
+  label $calc_top.right.traj.frames.reflabel -text "Frame ref:" \
     -bg $calc_bgcol -fg $calc_fgcol \
     -padx 3 -pady 3
 
@@ -1095,7 +1099,7 @@ proc ::RMSDTT::rmsdtt {} {
     -activebackground $calc_bgcol -bg $calc_bgcol \
     -fg $calc_fgcol -activeforeground $calc_fgcol \
     -text "All" -variable [namespace current]::frames_all \
-    -command ::RMSDTT::ctrltraj
+    -command ::RMSDTT::ctrlgui
   
 
   frame $calc_top.right.traj.time -bg $calc_bgcol -relief ridge -bd 0
@@ -1104,7 +1108,7 @@ proc ::RMSDTT::rmsdtt {} {
     -activebackground $calc_bgcol -bg $calc_bgcol \
     -fg $calc_fgcol -activeforeground $calc_fgcol \
     -text "Time (ps)" -variable [namespace current]::time_sw \
-    -command ::RMSDTT::ctrltime
+    -command ::RMSDTT::ctrlgui
 
     label $calc_top.right.traj.time.inilabel -text "Ini:" \
     -bg $calc_bgcol -fg $calc_fgcol \
@@ -1157,6 +1161,7 @@ proc ::RMSDTT::rmsdtt {} {
   pack $rc_win.selfr -side top -fill both -expand 1 -padx 4 -pady 4
   pack $rc_win.bb -side left 
   pack $rc_win.tr -side left 
+  pack $rc_win.noh -side left 
   pack $rc_win.selectionhistory -side right
   pack $rc_win.selfr.sel -side top -fill both -expand 1
   pack $rc_win.selfr.sel -side top -fill both -expand 1
@@ -1170,7 +1175,7 @@ proc ::RMSDTT::rmsdtt {} {
   #pack $calc_top.right.switch.frame -side top -fill both
   pack $calc_top.right.switch.0 $calc_top.right.switch.1 $calc_top.right.switch.2\
     -side left -fill both -padx 2 -pady 2
-
+  
   ### ...trajectory...
   pack $calc_top.right.traj -side top -fill both
   pack $calc_top.right.traj.frames -side top -fill both
@@ -1315,8 +1320,7 @@ grid $calc_mid.titlebar.right -in $calc_mid.titlebar -column 1 -row 0 -columnspa
 
 
 # update the History menu
- RMSDTT::ListHisotryPullDownMenu
- ::RMSDTT::ctrltime
-
+ ListHisotryPullDownMenu
+ ctrlgui
 }
-  
+
