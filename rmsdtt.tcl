@@ -682,7 +682,7 @@ proc ::RMSDTT::doAlign {} {
     showMessage "Average option not available for Alignment in this version"
     return -code return
   }
-  set rms_sel [:set_sel]
+  set rms_sel [set_sel]
   align_all $rms_sel $rmsd_base $frames_ref
 }
 
