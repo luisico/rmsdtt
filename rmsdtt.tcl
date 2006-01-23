@@ -38,6 +38,9 @@ namespace eval ::RMSDTT:: {
   variable bb_only                   ;# backbon-only settings (C CA N)
   variable trace_only                ;# Trace settings
   variable noh                       ;# No hydrogens
+  variable skip_sw
+  variable skip_ini
+  variable skip_steps
   variable rms_sel                   ;# rms selection text
   variable rmsd_base                 ;# which molecule is the reference for rmsd calc.
   variable tot_rms                   ;# total rms value 
@@ -196,11 +199,16 @@ proc ::RMSDTT::compute_rms {sel_text {frames_ref 0}} {
   variable rms_values
   variable rmsd_base
   
+  variable skip_sw
+  variable skip_ini
+  variable skip_steps
   variable frames_sw
   variable frames_all
   variable rms_aveframe
   # delete this variable mol_ref?
   variable mol_ref
+  
+  array unset rms_values
 
   set all_mols [get_molid_from_pdb_list_to_operate_on]
   set mol_on_top [molinfo top]
@@ -319,7 +327,21 @@ proc ::RMSDTT::compute_rms {sel_text {frames_ref 0}} {
     set rms_ave($i) 0
 
     # for each frame
+    if {$frames_sw == 1 && $skip_sw == 1} {
+      set skipped_tot $skip_ini
+      set skipped $skip_steps
+    }
     for {set j 0} {$j < $jmax} {incr j} {
+      if {$frames_sw == 1 && $skip_sw == 1} {
+	if {$j < $skip_ini} {continue}
+	if {$skipped < $skip_steps} {
+	  incr skipped
+	  incr skipped_tot
+	  continue
+	} else {
+	  set skipped 0
+	}
+      }
       if {$frames_sw == 0} {set j [molinfo $i get frame]}
       if {$rmsd_base == "ave"} {
 	set rmsd [get_rmsd_ave $ref_coor $i $j $sel_text]
@@ -329,7 +351,8 @@ proc ::RMSDTT::compute_rms {sel_text {frames_ref 0}} {
       set rms_values($i,$j) $rmsd
       set rms_ave($i) [expr $rms_ave($i) + $rmsd]
     }
-
+    
+    if {$frames_sw == 1 && $skip_sw == 1} {set jmax [expr $jmax - $skipped_tot]}
     if {$frames_sw == 1 && $mol_ref == $i && $jmax > 1} {incr jmax -1}
     set rms_ave($i) [expr $rms_ave($i)/$jmax]
     set tot_rms [expr $tot_rms + $rms_ave($i)]
@@ -434,16 +457,15 @@ proc RMSDTT::set_sel {} {
   regsub -all "\#.*?\n" [$w.top.left.inner.selfr.sel get 1.0 end] "" temp1
   regsub -all "\n" $temp1 " " temp2
   regsub -all " $" $temp2 "" temp3
-#  puts "c <$rms_sel>"
+#  puts "c <$temp3>"
   if { $trace_only } {
     append rms_sel "($temp3) and name CA"
   } elseif { $bb_only } {
     append rms_sel "($temp3) and name C CA N"
+  } elseif { $noh } {
+    append rms_sel "($temp3) and noh"
   } else {
     append rms_sel $temp3
-  }
-  if { $noh } {
-    set rms_sel "($rms_sel) and noh"
   }
   return $rms_sel
 }
@@ -503,6 +525,9 @@ proc ::RMSDTT::saveData {} {
   variable time_sw
   variable time_ini
   variable time_step
+  variable skip_sw
+  variable skip_ini
+  variable skip_steps
   
   set file_out_id [open $file_out w]
   fconfigure $file_out_id -buffering line
@@ -524,6 +549,7 @@ proc ::RMSDTT::saveData {} {
   puts $file_out_id ""
   
   for {set j 0} {$j < $jmaxmax} {incr j} {
+    if {![info exists rms_values([lindex $all_mols 0],$j)]} {continue}
     if {$time_sw} {
       set time [expr $time_ini + $time_step * $j]
       puts -nonewline $file_out_id [format "%8.2f" $time]
@@ -732,6 +758,7 @@ proc ::RMSDTT::doPlot {} {
 	  puts $pipe_id "@ s$k symbol 1"
 	}
 	for {set j 0} {$j < $jmax} {incr j} {
+	  if {![info exists rms_values($i,$j)]} {continue}
 	  if {$time_sw} {
 	    set time [expr $time_ini + $time_step * $j]
 	    puts $pipe_id "$time $rms_values($i,$j)"
@@ -798,6 +825,7 @@ proc ::RMSDTT::doPlot {} {
 	$cells Item 1 $k "$iname ($i)"
 
 	for {set j 0} {$j < $jmax($i)} {incr j} {
+	  if {![info exists rms_values($i,$j)]} {continue}
 	  $cells Item [expr $j+2] $k $rms_values($i,$j)
 	}
       }
@@ -868,6 +896,9 @@ proc ::RMSDTT::ctrlgui {} {
   variable plot_sw
   variable rmsd_base
   variable time_sw
+  variable skip_sw
+  variable skip_ini
+  variable skip_steps
 
   if {$frames_sw} {
     if {$frames_all} {
@@ -895,6 +926,7 @@ proc ::RMSDTT::ctrlgui {} {
       }
     }
     $w.top.right.traj.time.0 config -state normal
+    $w.top.right.traj.skip.0 config -state normal
   } else {
     $w.top.right.traj.file.plot config -state disable
     $w.top.right.traj.file.0 config -state disable
@@ -903,6 +935,7 @@ proc ::RMSDTT::ctrlgui {} {
     $w.top.right.traj.frames.all config -state disable
     $w.top.right.traj.frames.ref config -state disable
     $w.top.right.traj.time.0 config -state disable
+    $w.top.right.traj.skip.0 config -state disable
   }
 
   if {$time_sw && $frames_sw} {
@@ -917,6 +950,18 @@ proc ::RMSDTT::ctrlgui {} {
     $w.top.right.traj.time.stepval config -state disable
   }
 
+  if {$skip_sw && $frames_sw} {
+    $w.top.right.traj.skip.inilabel config -state normal
+    $w.top.right.traj.skip.ini config -state normal
+    $w.top.right.traj.skip.stepslabel config -state normal
+    $w.top.right.traj.skip.steps config -state normal
+  } else {
+    $w.top.right.traj.skip.inilabel config -state disable
+    $w.top.right.traj.skip.ini config -state disable
+    $w.top.right.traj.skip.stepslabel config -state disable
+    $w.top.right.traj.skip.steps config -state disable
+  }
+
 }
 
 
@@ -924,10 +969,16 @@ proc ::RMSDTT::ctrlbb { obj } {
   variable w
   variable bb_only
   variable trace_only
+  variable noh
 
   if {$obj == "bb"} {
     set trace_only 0
+    set noh 0
   } elseif {$obj == "trace"} {
+    set bb_only 0
+    set noh 0
+  } elseif {$obj == "noh"} {
+    set trace_only 0
     set bb_only 0
   }
 }
@@ -938,6 +989,9 @@ proc ::RMSDTT::rmsdtt {} {
   variable bb_only 
   variable trace_only
   variable noh
+  variable skip_sw
+  variable skip_ini
+  variable skip_steps
   variable pdb_list
   variable rms_ave 
   variable rms_list 
@@ -978,6 +1032,10 @@ proc ::RMSDTT::rmsdtt {} {
   set RMSDhistory ""
   set rmsd_base {top}
   set tot_rms {}
+
+  set skip_sw 0
+  set skip_ini 0
+  set skip_steps 1
 
   set frames_sw 1
   set frames_ref 0
@@ -1030,7 +1088,8 @@ proc ::RMSDTT::rmsdtt {} {
   checkbutton $rc_win.noh -highlightthickness 0 \
     -activebackground $calc_bgcol -bg $calc_bgcol \
     -fg $calc_fgcol -activeforeground $calc_fgcol \
-    -text {noh} -variable [namespace current]::noh
+    -text {noh} -variable [namespace current]::noh \
+   -command {::RMSDTT::ctrlbb noh}
 
   menubutton  $rc_win.selectionhistory \
         -menu $rc_win.selectionhistory.m -padx 5 -pady 4 \
@@ -1101,6 +1160,31 @@ proc ::RMSDTT::rmsdtt {} {
     -text "All" -variable [namespace current]::frames_all \
     -command ::RMSDTT::ctrlgui
   
+  frame $calc_top.right.traj.skip  -bg $calc_bgcol -relief ridge -bd 0
+  
+  checkbutton $calc_top.right.traj.skip.0 -highlightthickness 0 \
+    -activebackground $calc_bgcol -bg $calc_bgcol \
+    -fg $calc_fgcol -activeforeground $calc_fgcol \
+    -text "Skip" -variable [namespace current]::skip_sw \
+    -command ::RMSDTT::ctrlgui
+
+  label $calc_top.right.traj.skip.inilabel -text "Ini:" \
+    -bg $calc_bgcol -fg $calc_fgcol \
+    -padx 3 -pady 3
+
+  entry $calc_top.right.traj.skip.ini -bd 0 -highlightthickness 0 -insertofftime 0 \
+    -bg $entry_bgcol -selectbackground $sel_bgcol -selectforeground $sel_fgcol \
+    -selectborderwidth 0 -exportselection yes -width 3 \
+    -textvariable [namespace current]::skip_ini
+
+  label $calc_top.right.traj.skip.stepslabel -text "Steps:" \
+    -bg $calc_bgcol -fg $calc_fgcol \
+    -padx 3 -pady 3
+
+  entry $calc_top.right.traj.skip.steps -bd 0 -highlightthickness 0 -insertofftime 0 \
+    -bg $entry_bgcol -selectbackground $sel_bgcol -selectforeground $sel_fgcol \
+    -selectborderwidth 0 -exportselection yes -width 3 \
+    -textvariable [namespace current]::skip_steps
 
   frame $calc_top.right.traj.time -bg $calc_bgcol -relief ridge -bd 0
 
@@ -1110,7 +1194,7 @@ proc ::RMSDTT::rmsdtt {} {
     -text "Time (ps)" -variable [namespace current]::time_sw \
     -command ::RMSDTT::ctrlgui
 
-    label $calc_top.right.traj.time.inilabel -text "Ini:" \
+  label $calc_top.right.traj.time.inilabel -text "Ini:" \
     -bg $calc_bgcol -fg $calc_fgcol \
     -padx 3 -pady 3
 
@@ -1119,7 +1203,7 @@ proc ::RMSDTT::rmsdtt {} {
     -selectborderwidth 0 -exportselection yes -width 6 \
     -textvariable [namespace current]::time_ini
 
-    label $calc_top.right.traj.time.steplabel -text "Step:" \
+  label $calc_top.right.traj.time.steplabel -text "Step:" \
     -bg $calc_bgcol -fg $calc_fgcol \
     -padx 3 -pady 3
 
@@ -1180,6 +1264,10 @@ proc ::RMSDTT::rmsdtt {} {
   pack $calc_top.right.traj -side top -fill both
   pack $calc_top.right.traj.frames -side top -fill both
   pack $calc_top.right.traj.frames.0 $calc_top.right.traj.frames.reflabel $calc_top.right.traj.frames.ref $calc_top.right.traj.frames.all\
+    -side left -fill both -padx 2 -pady 2
+  pack $calc_top.right.traj.skip -side top -fill both
+  pack $calc_top.right.traj.skip.0 $calc_top.right.traj.skip.inilabel $calc_top.right.traj.skip.ini\
+    $calc_top.right.traj.skip.stepslabel $calc_top.right.traj.skip.steps\
     -side left -fill both -padx 2 -pady 2
   pack $calc_top.right.traj.time -side top -fill both
   pack $calc_top.right.traj.time.0 $calc_top.right.traj.time.inilabel $calc_top.right.traj.time.inival\
