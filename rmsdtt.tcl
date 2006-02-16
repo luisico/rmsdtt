@@ -9,14 +9,18 @@
 ##
 ##
 
-##
-## Example code to add this plugin to the VMD extensions menu:
-##
-#  if { [catch {package require rmsdtt} msg] } {
-#    puts "VMD RMSDTT package could not be loaded:\n$msg"
-#  } elseif { [catch {menu tk register "rmsdtt" rmsdtt} msg] } {
-#    puts "VMD RMSDTT could not be started:\n$msg"
-#  }
+# Installation
+# ------------
+# To add this pluging to the VMD extensions menu you can either:
+# a) add this to your .vmdrc:
+#    vmd_install_extension rmsdtt rmsdtt_tk_cb "WMC PhysBio/RMSDTT"
+#
+# b) add this to your .vmdrc
+#    if { [catch {package require rmsdtt} msg] } {
+#      puts "VMD RMSDTT package could not be loaded:\n$msg"
+#    } elseif { [catch {menu tk register "rmsdtt" rmsdtt} msg] } {
+#      puts "VMD RMSDTT could not be started:\n$msg"
+#    }
 
 # Plugin-ized version of a modified version of the VMD RMSD script
 
@@ -29,7 +33,9 @@
 # Tell Tcl that we're a package and any dependencies we may have
 package provide rmsdtt 1.0
 
-namespace eval ::RMSDTT:: {
+package require swap
+
+namespace eval ::rmsdtt:: {
   namespace export rmsdtt
   variable w                         ;# handle to main window
   variable rms_ave                   ;# array of rms ave
@@ -77,7 +83,7 @@ namespace eval ::RMSDTT:: {
   variable scr_trough  \#c3c3c3
 }
 
-proc ::RMSDTT::get_molid_from_pdb_list_to_operate_on {} { 
+proc ::rmsdtt::get_molid_from_pdb_list_to_operate_on {} { 
   variable pdb_list
   set all_mols {}
   set listedpdbs [$pdb_list get 0 end]
@@ -87,7 +93,7 @@ proc ::RMSDTT::get_molid_from_pdb_list_to_operate_on {} {
 }
 
 
-proc ::RMSDTT::molactive {} {
+proc ::rmsdtt::molactive {} {
   set mol_active_list {}
   set all_mols [molinfo list]
     
@@ -100,7 +106,7 @@ proc ::RMSDTT::molactive {} {
   return $mol_active_list
 }
 
-proc ::RMSDTT::align { sel1 thisframe sel2} {
+proc ::rmsdtt::align { sel1 thisframe sel2} {
   # tries to align sel1 with sel2, using the atoms of each selection.
   # If sel1 and sel2 contain a different number of atoms, it fails.
 
@@ -113,7 +119,7 @@ proc ::RMSDTT::align { sel1 thisframe sel2} {
 }
 
 
-proc ::RMSDTT::align_all {sel_text rmsd_base frames_ref} {
+proc ::rmsdtt::align_all {sel_text rmsd_base frames_ref} {
   variable pdb_list
   variable frames_sw
   set all_mols [get_molid_from_pdb_list_to_operate_on]
@@ -150,7 +156,7 @@ proc ::RMSDTT::align_all {sel_text rmsd_base frames_ref} {
 }
 
 
-proc ::RMSDTT::ini_zero {length} {
+proc ::rmsdtt::ini_zero {length} {
   if {$length<=0} return {}
 
   set half_l [expr $length>>1]
@@ -166,7 +172,7 @@ proc ::RMSDTT::ini_zero {length} {
 }
 
 
-proc ::RMSDTT::ave_struc {sel_text} {
+proc ::rmsdtt::ave_struc {sel_text} {
   set all_mols [get_molid_from_pdb_list_to_operate_on]
   set n_mols [llength $all_mols]
   set factor [expr 1./$n_mols]
@@ -192,7 +198,7 @@ proc ::RMSDTT::ave_struc {sel_text} {
 }
 
 
-proc ::RMSDTT::compute_rms {sel_text {frames_ref 0}} {
+proc ::rmsdtt::compute_rms {sel_text {frames_ref 0}} {
   variable rms_ave 
   variable rms_disp 
   variable pdb_list
@@ -363,14 +369,45 @@ proc ::RMSDTT::compute_rms {sel_text {frames_ref 0}} {
   return $tot_rms
 }
 
-proc ::RMSDTT::get_rmsd { mol1 frame1 mol2 frame2 sel_text } {
+proc ::rmsdtt::get_rmsd { mol1 frame1 mol2 frame2 sel_text } {
+  variable swap_sw
+  variable swap_print
+
   set sel1 [atomselect $mol1 $sel_text frame $frame1] 
   set sel2 [atomselect $mol2 $sel_text frame $frame2]
   set rmsd [measure rmsd $sel1 $sel2]
+
+  set swapped ""
+  if {$swap_sw} {
+    set res [lsort -unique -integer [[atomselect $mol2 "$sel_text and resname [array names ::swap::swap_list]" frame $frame2] get residue]]
+    foreach r $res {
+      set s [atomselect $mol2 "residue $r"]
+      ::swap::swap_residue $s $frame2
+      set rmsd2 [measure rmsd $sel1 $sel2]
+      if {$rmsd2 < $rmsd} {
+	if {$swap_print} {
+	  puts "swapped mol $mol2 frame $frame2 residue $r ([lindex [$s get {resname resid chain segname}] 0]) $rmsd $rmsd2"
+	}
+	set rmsd $rmsd2
+	lappend swapped $s
+      } else {
+	::swap::swap_residue $s $frame2
+      }
+    }
+
+    foreach s $swapped {
+      if {$s == ""} {
+	continue
+      } else {
+	::swap::swap_residue $s $frame2
+      }
+    }
+  }
+  
   return $rmsd
 }
 
-proc ::RMSDTT::get_rmsd_ave { ref_coor mol2 frame2 sel_text } {
+proc ::rmsdtt::get_rmsd_ave { ref_coor mol2 frame2 sel_text } {
   set sel2 [atomselect $mol2 $sel_text frame $frame2]
   set coor2 [$sel2 get {x y z}]
   set numatoms [llength $ref_coor]
@@ -388,7 +425,7 @@ proc ::RMSDTT::get_rmsd_ave { ref_coor mol2 frame2 sel_text } {
   return $rmsd
 }
 
-proc ::RMSDTT::reveal_rms {} {
+proc ::rmsdtt::reveal_rms {} {
   variable rms_ave 
   variable rms_list 
  
@@ -401,7 +438,7 @@ proc ::RMSDTT::reveal_rms {} {
 
 
 
-proc ::RMSDTT::two_scroll args {
+proc ::rmsdtt::two_scroll args {
   variable pdb_list 
   variable rms_list
   eval "$pdb_list yview $args"
@@ -409,7 +446,7 @@ proc ::RMSDTT::two_scroll args {
 }
 
 
-proc ::RMSDTT::onlyactive args {
+proc ::rmsdtt::onlyactive args {
   variable pdb_list 
   variable rms_list
   $pdb_list delete 0 end
@@ -427,13 +464,13 @@ proc rmsdtt_tk_cb {} {
   # Don't destroy the main window, because we want to register the window
   # with VMD and keep reusing it.  The window gets iconified instead of
   # destroyed when closed for any reason.
-  #set foobar [catch {destroy $::RMSDTT::w  }]  ;# destroy any old windows
+  #set foobar [catch {destroy $::rmsdtt::w  }]  ;# destroy any old windows
 
-  ::RMSDTT::rmsdtt   ;# start the RMSD Tool
-  return $RMSDTT::w
+  ::rmsdtt::rmsdtt   ;# start the RMSD Tool
+  return $rmsdtt::w
 }
 
-proc RMSDTT::showMessage {mess} {
+proc rmsdtt::showMessage {mess} {
   bell
   toplevel .messpop 
   grab .messpop
@@ -446,11 +483,12 @@ proc RMSDTT::showMessage {mess} {
 }
 
 
-proc RMSDTT::set_sel {} {
+proc rmsdtt::set_sel {} {
   variable w
   variable bb_only
   variable trace_only
   variable noh
+  variable swap_sw
 
 #  set a [$w.top.left.inner.selfr.sel get 1.0 end]
 #  puts "a <$a>"
@@ -462,7 +500,7 @@ proc RMSDTT::set_sel {} {
     append rms_sel "($temp3) and name CA"
   } elseif { $bb_only } {
     append rms_sel "($temp3) and name C CA N"
-  } elseif { $noh } {
+  } elseif { $noh || $swap_sw} {
     append rms_sel "($temp3) and noh"
   } else {
     append rms_sel $temp3
@@ -470,24 +508,24 @@ proc RMSDTT::set_sel {} {
   return $rms_sel
 }
 
-proc RMSDTT::ListHisotryPullDownMenu {} {
+proc rmsdtt::ListHisotryPullDownMenu {} {
   variable RMSDhistory
   set rc_win .rmsdtt.top.left.inner
   $rc_win.selectionhistory.m delete 0 end
   foreach sel $RMSDhistory {
   	$rc_win.selectionhistory.m add command -label $sel \
-  	 -command [list RMSDTT::chooseHistoryItem $sel]
+  	 -command [list rmsdtt::chooseHistoryItem $sel]
   }
 }
 
 
-proc ::RMSDTT::chooseHistoryItem {sel} {
+proc ::rmsdtt::chooseHistoryItem {sel} {
   variable rms_sel
   set rms_sel $sel
 }
 
 
-proc ::RMSDTT::saveDataAll {frame_ref file_out_id time_ref} {
+proc ::rmsdtt::saveDataAll {frame_ref file_out_id time_ref} {
   variable rms_values
   variable time_sw
   variable time_ini
@@ -519,7 +557,7 @@ proc ::RMSDTT::saveDataAll {frame_ref file_out_id time_ref} {
 }
 
 
-proc ::RMSDTT::saveData {} {
+proc ::rmsdtt::saveData {} {
   variable rms_values
   variable file_out
   variable time_sw
@@ -575,7 +613,7 @@ proc ::RMSDTT::saveData {} {
   
 }
 
-proc ::RMSDTT::tempfile {prefix suffix} {
+proc ::rmsdtt::tempfile {prefix suffix} {
   # From wiki.tcl.tk/772
   set chars "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
   set nrand_chars 10
@@ -616,7 +654,7 @@ proc ::RMSDTT::tempfile {prefix suffix} {
   }
 }
 
-proc ::RMSDTT::doRmsd {} {
+proc ::rmsdtt::doRmsd {} {
   variable w
   variable rmsd_base
   variable rms_sel
@@ -698,7 +736,7 @@ proc ::RMSDTT::doRmsd {} {
   ListHisotryPullDownMenu
 }
 
-proc ::RMSDTT::doAlign {} {
+proc ::rmsdtt::doAlign {} {
   variable w
   variable rmsd_base
   variable rms_sel
@@ -712,7 +750,7 @@ proc ::RMSDTT::doAlign {} {
   align_all $rms_sel $rmsd_base $frames_ref
 }
 
-proc ::RMSDTT::doPlot {} {
+proc ::rmsdtt::doPlot {} {
   variable rms_values
   variable rms_sel
   variable time_sw
@@ -874,7 +912,7 @@ proc ::RMSDTT::doPlot {} {
 
 }
 
-proc RMSDTT::int2word {int} {
+proc rmsdtt::int2word {int} {
   # http://wiki.tcl.tk/10915
   set alphabet [a-z]
   set word ""
@@ -888,7 +926,7 @@ proc RMSDTT::int2word {int} {
 }
 proc a-z {} {list a b c d e f g h i j k l m n o p q r s t u v w x y z}
 
-proc ::RMSDTT::ctrlgui {} {
+proc ::rmsdtt::ctrlgui {} {
   variable w
   variable frames_sw
   variable frames_all
@@ -899,6 +937,8 @@ proc ::RMSDTT::ctrlgui {} {
   variable skip_sw
   variable skip_ini
   variable skip_steps
+  variable swap_sw
+  variable noh
 
   if {$frames_sw} {
     if {$frames_all} {
@@ -916,9 +956,17 @@ proc ::RMSDTT::ctrlgui {} {
       $w.top.right.traj.frames.reflabel config -state disable
       $w.top.right.traj.frames.all config -state disable
       $w.top.right.traj.frames.ref config -state disable
-    } else {
+      $w.top.right.swap.0 config -state disable
+      $w.top.right.swap.type config -state disable
+      $w.top.right.swap.list config -state disable
+      $w.top.right.swap.print config -state disable
+     } else {
       $w.top.right.traj.frames.reflabel config -state normal
       $w.top.right.traj.frames.all config -state normal
+      $w.top.right.swap.0 config -state normal
+      $w.top.right.swap.type config -state normal
+      $w.top.right.swap.list config -state normal
+      $w.top.right.swap.print config -state normal
       if {$frames_all} {
 	$w.top.right.traj.frames.ref config -state disable
       } else {
@@ -962,10 +1010,35 @@ proc ::RMSDTT::ctrlgui {} {
     $w.top.right.traj.skip.steps config -state disable
   }
 
+  if {$swap_sw} {
+    set noh 1
+    $w.top.left.inner.noh config -state disable
+  } else {
+    $w.top.left.inner.noh config -state normal
+  }
+  update_swap_types
+
 }
 
 
-proc ::RMSDTT::ctrlbb { obj } {
+proc ::rmsdtt::update_swap_types {} {
+  variable w
+  variable swap_type
+
+  $w.top.right.swap.type.menu delete 0 end
+  $w.top.right.swap.type.menu add radiobutton -value "all" -label "all" -variable ::rmsdtt::swap_type
+
+  foreach r [array names ::swap::swap_list] {
+    lappend types [lindex $::swap::swap_list($r) 0]
+  }
+  foreach t [lsort -unique $types] {
+    $w.top.right.swap.type.menu add radiobutton -value $t -label $t -variable ::rmsdtt::swap_type
+  }
+  
+}
+
+
+proc ::rmsdtt::ctrlbb { obj } {
   variable w
   variable bb_only
   variable trace_only
@@ -984,7 +1057,7 @@ proc ::RMSDTT::ctrlbb { obj } {
 }
 
 
-proc ::RMSDTT::rmsdtt {} {
+proc ::rmsdtt::rmsdtt {} {
   variable w ;# Tk window
   variable bb_only 
   variable trace_only
@@ -992,6 +1065,9 @@ proc ::RMSDTT::rmsdtt {} {
   variable skip_sw
   variable skip_ini
   variable skip_steps
+  variable swap_sw
+  variable swap_type
+  variable swap_print
   variable pdb_list
   variable rms_ave 
   variable rms_list 
@@ -1037,6 +1113,10 @@ proc ::RMSDTT::rmsdtt {} {
   set skip_ini 0
   set skip_steps 1
 
+  set swap_sw 0
+  set swap_type "all"
+  set swap_print 1
+
   set frames_sw 1
   set frames_ref 0
   set frames_all 0
@@ -1071,25 +1151,25 @@ proc ::RMSDTT::rmsdtt {} {
   text $rc_win.selfr.sel -bd 0 -highlightthickness 0 -insertofftime 0 \
     -bg $entry_bgcol -selectbackground $sel_bgcol -selectforeground $sel_fgcol \
     -selectborderwidth 0 -exportselection yes -height 5 -width 25 -wrap word
-   $rc_win.selfr.sel insert end {resid 5 to 85}
+   $rc_win.selfr.sel insert end {segname LIG}
 
   checkbutton $rc_win.bb -highlightthickness 0 \
     -activebackground $calc_bgcol -bg $calc_bgcol \
     -fg $calc_fgcol -activeforeground $calc_fgcol \
     -text {Backbone} -variable [namespace current]::bb_only \
-    -command {::RMSDTT::ctrlbb bb}
+    -command {::rmsdtt::ctrlbb bb}
 
   checkbutton $rc_win.tr -highlightthickness 0 \
     -activebackground $calc_bgcol -bg $calc_bgcol \
     -fg $calc_fgcol -activeforeground $calc_fgcol \
     -text {Trace} -variable [namespace current]::trace_only \
-   -command {::RMSDTT::ctrlbb trace}
+   -command {::rmsdtt::ctrlbb trace}
 
   checkbutton $rc_win.noh -highlightthickness 0 \
     -activebackground $calc_bgcol -bg $calc_bgcol \
     -fg $calc_fgcol -activeforeground $calc_fgcol \
     -text {noh} -variable [namespace current]::noh \
-   -command {::RMSDTT::ctrlbb noh}
+   -command {::rmsdtt::ctrlbb noh}
 
   menubutton  $rc_win.selectionhistory \
         -menu $rc_win.selectionhistory.m -padx 5 -pady 4 \
@@ -1106,13 +1186,13 @@ proc ::RMSDTT::rmsdtt {} {
   button $calc_top.right.rmsd -relief raised -bd 4 -highlightthickness 0 -text {RMSD} \
     -activebackground $but_abgcol -bg $but_bgcol \
     -fg $calc_fgcol -activeforeground $calc_fgcol \
-    -command {::RMSDTT::doRmsd}
+    -command {::rmsdtt::doRmsd}
 
   
    button $calc_top.right.align -relief raised -bd 4 -highlightthickness 0 -text {Align} \
     -activebackground $act_bgcol -bg $but_bgcol \
     -activeforeground $act_fgcol -fg $ftr_fgcol  \
-    -command {::RMSDTT::doAlign}
+    -command {::rmsdtt::doAlign}
   
   frame $calc_top.right.switch -bg $calc_bgcol -relief ridge -bd 4
 
@@ -1120,19 +1200,40 @@ proc ::RMSDTT::rmsdtt {} {
     -activebackground $calc_bgcol -bg $calc_bgcol \
     -fg $calc_fgcol -activeforeground $calc_fgcol \
     -text {Top} -variable [namespace current]::rmsd_base -value "top" \
-    -command ::RMSDTT::ctrlgui
+    -command ::rmsdtt::ctrlgui
 
   radiobutton $calc_top.right.switch.1 -highlightthickness 0 \
     -activebackground $calc_bgcol -bg $calc_bgcol \
     -fg $calc_fgcol -activeforeground $calc_fgcol \
     -text {Average} -variable [namespace current]::rmsd_base -value "ave" \
-    -command ::RMSDTT::ctrlgui
+    -command ::rmsdtt::ctrlgui
 
   radiobutton $calc_top.right.switch.2 -highlightthickness 0 \
     -activebackground $calc_bgcol -bg $calc_bgcol \
     -fg $calc_fgcol -activeforeground $calc_fgcol \
     -text {Selected} -variable [namespace current]::rmsd_base -value "selected" \
-    -command ::RMSDTT::ctrlgui
+    -command ::rmsdtt::ctrlgui
+
+  frame $calc_top.right.swap -bg $calc_bgcol -relief ridge -bd 4
+
+  checkbutton $calc_top.right.swap.0 -highlightthickness 0 \
+    -activebackground $calc_bgcol -bg $calc_bgcol \
+    -fg $calc_fgcol -activeforeground $calc_fgcol \
+    -text "Swap_atoms:" -variable [namespace current]::swap_sw \
+    -command ::rmsdtt::ctrlgui
+
+  menubutton $calc_top.right.swap.type -relief raised -bd 1 -direction flush -textvariable [namespace current]::swap_type -menu $calc_top.right.swap.type.menu
+  menu $calc_top.right.swap.type.menu
+
+  checkbutton $calc_top.right.swap.print -highlightthickness 0 \
+    -activebackground $calc_bgcol -bg $calc_bgcol \
+    -fg $calc_fgcol -activeforeground $calc_fgcol \
+    -text "print:" -variable [namespace current]::swap_print
+
+  button $calc_top.right.swap.list -relief raised -bd 2 -highlightthickness 0 -text "List" \
+    -activebackground $but_abgcol -bg $but_bgcol \
+    -fg $calc_fgcol -activeforeground $calc_fgcol \
+    -command [namespace code {::swap::list $swap_type}]
 
   # Trajectory part.
   frame $calc_top.right.traj -bg $calc_bgcol -relief ridge -bd 4
@@ -1143,7 +1244,7 @@ proc ::RMSDTT::rmsdtt {} {
     -activebackground $calc_bgcol -bg $calc_bgcol \
     -fg $calc_fgcol -activeforeground $calc_fgcol \
     -text "Trajectory" -variable [namespace current]::frames_sw \
-    -command ::RMSDTT::ctrlgui
+    -command ::rmsdtt::ctrlgui
 
   label $calc_top.right.traj.frames.reflabel -text "Frame ref:" \
     -bg $calc_bgcol -fg $calc_fgcol \
@@ -1158,7 +1259,7 @@ proc ::RMSDTT::rmsdtt {} {
     -activebackground $calc_bgcol -bg $calc_bgcol \
     -fg $calc_fgcol -activeforeground $calc_fgcol \
     -text "All" -variable [namespace current]::frames_all \
-    -command ::RMSDTT::ctrlgui
+    -command ::rmsdtt::ctrlgui
   
   frame $calc_top.right.traj.skip  -bg $calc_bgcol -relief ridge -bd 0
   
@@ -1166,7 +1267,7 @@ proc ::RMSDTT::rmsdtt {} {
     -activebackground $calc_bgcol -bg $calc_bgcol \
     -fg $calc_fgcol -activeforeground $calc_fgcol \
     -text "Skip" -variable [namespace current]::skip_sw \
-    -command ::RMSDTT::ctrlgui
+    -command ::rmsdtt::ctrlgui
 
   label $calc_top.right.traj.skip.inilabel -text "Ini:" \
     -bg $calc_bgcol -fg $calc_fgcol \
@@ -1192,7 +1293,7 @@ proc ::RMSDTT::rmsdtt {} {
     -activebackground $calc_bgcol -bg $calc_bgcol \
     -fg $calc_fgcol -activeforeground $calc_fgcol \
     -text "Time (ps)" -variable [namespace current]::time_sw \
-    -command ::RMSDTT::ctrlgui
+    -command ::rmsdtt::ctrlgui
 
   label $calc_top.right.traj.time.inilabel -text "Ini:" \
     -bg $calc_bgcol -fg $calc_fgcol \
@@ -1260,6 +1361,10 @@ proc ::RMSDTT::rmsdtt {} {
   pack $calc_top.right.switch.0 $calc_top.right.switch.1 $calc_top.right.switch.2\
     -side left -fill both -padx 2 -pady 2
   
+  ### ...swap...
+  pack $calc_top.right.swap -side top -fill both
+  pack $calc_top.right.swap.0 $calc_top.right.swap.type $calc_top.right.swap.print $calc_top.right.swap.list -side left -fill both
+
   ### ...trajectory...
   pack $calc_top.right.traj -side top -fill both
   pack $calc_top.right.traj.frames -side top -fill both
@@ -1336,7 +1441,7 @@ grid $calc_mid.titlebar.right -in $calc_mid.titlebar -column 1 -row 0 -columnspa
     -bg $calc_bgcol -troughcolor $scr_trough -highlightthickness 0 \
     -activebackground $but_abgcol \
     -orient vert \
-    -command  {RMSDTT::two_scroll}
+    -command  {rmsdtt::two_scroll}
    
 
   # Pack the bottom part widgets.
@@ -1375,7 +1480,7 @@ grid $calc_mid.titlebar.right -in $calc_mid.titlebar -column 1 -row 0 -columnspa
 
   button $w.bottom.onlyactive -relief raised -bd 4 -highlightthickness 0 -text {Only active} \
     -activebackground $but_abgcol -bg $but_bgcol \
-    -command {RMSDTT::onlyactive}
+    -command {rmsdtt::onlyactive}
 
   menubutton $w.bottom.assemblymenu \
         -menu $w.bottom.assemblymenu.m -padx 5 -pady 4 \
@@ -1408,7 +1513,8 @@ grid $calc_mid.titlebar.right -in $calc_mid.titlebar -column 1 -row 0 -columnspa
 
 
 # update the History menu
- ListHisotryPullDownMenu
- ctrlgui
+  ListHisotryPullDownMenu
+  update_swap_types
+  ctrlgui
 }
 
