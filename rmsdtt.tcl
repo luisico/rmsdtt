@@ -1,13 +1,18 @@
-##
-## RMSD Trajectory Tool
-##
-## A GUI interface for RMSD alignment
-##
-## Authors: Alexander Balaeff, Pascal Mercier, John Stone
-##
-## Modifed by Luis Gracia to include trajectories
-##
-##
+#
+#             RMSD Trajectory Tool v2.0
+#
+# A GUI interface for RMSD alignment and analysis of trajectories
+
+# Author
+# ------
+#      Luis Gracia, PhD
+#      Weill Medical College, Cornel University, NY
+#      lug2002@med.cornell.edu
+
+# This plugin is based on the RMSD Tool plugin written by
+#   Alexander Balaeff, PhD, TB Group, UIUC
+#   Pascal Mercier, PhD, Biochemistry Dept, Univ. of Alberta, Edmonton, Canada
+#   John Stone, TB Group, UIUC
 
 # Installation
 # ------------
@@ -22,363 +27,513 @@
 #      puts "VMD RMSDTT could not be started:\n$msg"
 #    }
 
-# Plugin-ized version of a modified version of the VMD RMSD script
 
-# Authors:
-#   Alexander Balaeff, PhD, TB Group, UIUC
-#   Pascal Mercier, PhD, Biochemistry Dept, Univ. of Alberta, Edmonton, Canada
-#   John Stone, TB Group, UIUC
-#   Luis Gracia, PhD, Weill Medical College, Cornel University, NY
-
-# Tell Tcl that we're a package and any dependencies we may have
-package provide rmsdtt 1.0
-
-package require swap
+package provide rmsdtt 2.0
 
 namespace eval ::rmsdtt:: {
   namespace export rmsdtt
-  variable w                         ;# handle to main window
-  variable rms_ave                   ;# array of rms ave
-  variable rms_list                  ;# list of rms values
-  variable pdb_list                  ;# list of pdb files
-  variable bb_only                   ;# backbon-only settings (C CA N)
-  variable trace_only                ;# Trace settings
-  variable noh                       ;# No hydrogens
-  variable skip_sw
-  variable skip_ini
-  variable skip_steps
-  variable rms_sel                   ;# rms selection text
-  variable rmsd_base                 ;# which molecule is the reference for rmsd calc.
-  variable tot_rms                   ;# total rms value 
-  variable RMSDhistory		     ;# history of selections
-  variable rms_values
-  
   option add *Font {Helvetica -12}
-  # Original color scheme by Alexander/Pascal
-  #  variable ftr_bgcol   \#2a4
-  #  variable ftr_fgcol   \#ff0
-  #  variable calc_bgcol  \#24a
-  #  variable calc_fgcol  \#ff0
-  #  variable sel_bgcol   \#333
-  #  variable sel_fgcol   \#ccc
-  #  variable act_bgcol   \#0b4
-  #  variable act_fgcol   \#f00
-  #  variable entry_bgcol \#a64da6
-  #  variable but_abgcol  \#26c
-  #  variable but_bgcol   \#338
-  #  variable scr_trough  \#126
-
-  # Calmer color scheme that looks like other plugins
-  variable ftr_bgcol   \#d9d9d9
-  variable ftr_fgcol   \#000
-  variable calc_bgcol  \#d9d9d9
-  variable calc_fgcol  \#000
-  variable sel_bgcol   \#ff0
-  variable sel_fgcol   \#000
-  variable act_bgcol   \#d9d9d9
-  variable act_fgcol   \#000
-  variable entry_bgcol \#fff
-  variable but_abgcol  \#d9d9d9
-  variable but_bgcol   \#d9d9d9
-  variable scr_trough  \#c3c3c3
-}
-
-proc ::rmsdtt::get_molid_from_pdb_list_to_operate_on {} { 
-  variable pdb_list
-  set all_mols {}
-  set listedpdbs [$pdb_list get 0 end]
-
-  foreach pdb $listedpdbs { lappend all_mols [lindex $pdb 0] }
-    return $all_mols
 }
 
 
-proc ::rmsdtt::molactive {} {
-  set mol_active_list {}
-  set all_mols [molinfo list]
+proc rmsdtt_tk_cb {} {
+  # This gets called by VMD the first time the menu is opened.
+  #variable foobar
+  # Don't destroy the main window, because we want to register the window
+  # with VMD and keep reusing it.  The window gets iconified instead of
+  # destroyed when closed for any reason.
+  #set foobar [catch {destroy $::rmsdtt::w  }]  ;# destroy any old windows
+
+  # start RMSDTT
+  ::rmsdtt::rmsdtt
+  return $rmsdtt::w
+}
+
+
+proc rmsdtt::rmsdtt {} {
+  variable w
+  variable bb_only    0
+  variable trace_only 0
+  variable noh        1
+  variable swap_use   1
+  variable swap_sw    0
+  variable swap_type  "all"
+  variable swap_print 1
+  variable rmsd_base  "top"
+  variable traj_sw    1
+  variable traj_ref   0
+  variable traj_all   0
+  variable skip_sw    0
+  variable skip_ini   0
+  variable skip_steps 1
+  variable time_sw    0
+  variable time_ini   0.0
+  variable time_step  1.0
+  variable save_sw    0
+  variable save_file  "trajrmsd.dat"
+  variable plot_sw    0
+  variable plot_program "multiplot"
+  variable bb_def     "C CA N"
+  variable stats      1
+  variable datalist
+  variable datatot
+
+  # If already initialized, just turn on
+  if { [winfo exists .rmsdtt] } {
+    wm deiconify $w
+    return
+  }
+
+  # Main window
+  set w [toplevel ".rmsdtt"]
+  wm title $w "RMSD Trajectory Tool"
+  wm resizable $w 0 0
+
+  # Menu
+  frame $w.menubar -relief raised -bd 2
+  pack $w.menubar -padx 1 -fill x
+
+  menubutton $w.menubar.file -text "File" -underline 0 -menu $w.menubar.file.menu
+  menu $w.menubar.file.menu -tearoff no
+  $w.menubar.file.menu add command -label "Save..." -command "[namespace current]::SaveDataBrowse" -underline 0
+  $w.menubar.file.menu add command -label "Plot" -command "[namespace current]::doPlot" -underline 0
+  pack $w.menubar.file -side left
+
+  menubutton $w.menubar.options -text "Options" -underline 0 -menu $w.menubar.options.menu
+  menu $w.menubar.options.menu -tearoff no
+  $w.menubar.options.menu add cascade -label "Plotting program..." -menu $w.menubar.options.menu.plot -underline 0
+  menu $w.menubar.options.menu.plot
+  $w.menubar.options.menu.plot add radiobutton -label "Multiplot (all)" -variable [namespace current]::plot_program -value "multiplot" -underline 0
+  $w.menubar.options.menu.plot add radiobutton -label "Xmgrace (Unix)" -variable [namespace current]::plot_program -value "xmgrace" -underline 0
+  $w.menubar.options.menu.plot add radiobutton -label "MS Excel (Windows)" -variable [namespace current]::plot_program -value "excel" -underline 4
+  $w.menubar.options.menu add cascade -label "Backbone def..." -menu $w.menubar.options.menu.bbdef -underline 0
+  menu $w.menubar.options.menu.bbdef
+  $w.menubar.options.menu.bbdef add radiobutton -label "C CA N" -variable [namespace current]::bb_def -value "C CA N"
+  $w.menubar.options.menu.bbdef add radiobutton -label "C CA N O" -variable [namespace current]::bb_def -value "C CA N O"
+  $w.menubar.options.menu add checkbutton -label "Statistics" -variable [namespace current]::stats -underline 0
+  pack $w.menubar.options -side left
+
+  menubutton $w.menubar.help -text "Help" -underline 0 -menu $w.menubar.help.menu
+  menu $w.menubar.help.menu -tearoff no
+  $w.menubar.help.menu add command -label "About" -command [namespace current]::help_about
+  $w.menubar.help.menu add command -label "Help..." -command "vmd_open_url http://physiology.med.cornell.edu/faculty/hweinstein/vmdplugins/rmsdtt/index.html"
+  pack $w.menubar.help -side right
+
+  # Selection
+  frame $w.top
+  pack $w.top -side top -fill both
+
+  frame $w.top.left -relief ridge -bd 2
+  pack $w.top.left -side left -fill both
+
+  text $w.top.left.sel -bd 0 -highlightthickness 0 -selectborderwidth 0 -exportselection yes -height 5 -width 25 -wrap word -relief sunken -bd 2
+  pack $w.top.left.sel -side top -fill both -expand 1
+  $w.top.left.sel insert end "protein"
+
+  frame $w.top.left.mods -relief ridge -bd 2
+  pack $w.top.left.mods -side top
+  checkbutton $w.top.left.mods.bb -text "Backbone" -variable [namespace current]::bb_only -command {::rmsdtt::ctrlbb bb}
+  checkbutton $w.top.left.mods.tr -text "Trace" -variable [namespace current]::trace_only -command {::rmsdtt::ctrlbb trace}
+  checkbutton $w.top.left.mods.noh -text "noh" -variable [namespace current]::noh -command {::rmsdtt::ctrlbb noh}
+  pack $w.top.left.mods.bb $w.top.left.mods.tr $w.top.left.mods.noh -side left -anchor nw
+
+  menubutton  $w.top.left.mods.selectionhistory -menu $w.top.left.mods.selectionhistory.m -padx 5 -pady 4 -text "History" -relief raised -direction flush
+  menu $w.top.left.mods.selectionhistory.m
+  pack $w.top.left.mods.selectionhistory -side right
+
+  # Swap
+  if {[catch {package require swap} msg]} {
+    set swap_use 0
+  }
+  puts $swap_use
+  if {$swap_use} {
+    frame $w.top.left.swap -relief ridge -bd 2
+    pack $w.top.left.swap -side top -fill x
     
-  foreach i $all_mols  {
-    if { [molinfo $i get active] } {
-      set mol_active_list [concat $mol_active_list $i]
-    }
+    checkbutton $w.top.left.swap.0 -text "Swap_atoms:" -variable [namespace current]::swap_sw -command ::rmsdtt::ctrlgui
+    menubutton $w.top.left.swap.type -relief raised -bd 1 -direction flush -textvariable [namespace current]::swap_type -menu $w.top.left.swap.type.menu
+    menu $w.top.left.swap.type.menu
+    checkbutton $w.top.left.swap.print -text "print:" -variable [namespace current]::swap_print
+    button $w.top.left.swap.list -relief raised -bd 2 -text "List" -command [namespace code {::swap::list $swap_type}]
+    pack $w.top.left.swap.0 $w.top.left.swap.type $w.top.left.swap.print $w.top.left.swap.list -side left
   }
-
-  return $mol_active_list
-}
-
-proc ::rmsdtt::align { sel1 thisframe sel2} {
-  # tries to align sel1 with sel2, using the atoms of each selection.
-  # If sel1 and sel2 contain a different number of atoms, it fails.
-
-  $sel1 frame $thisframe
-  set tmatrix [measure fit $sel1 $sel2]
-  set molid [$sel1 molid]
-  set move_sel [atomselect $molid "all" frame $thisframe]
-  $move_sel move $tmatrix
-  return $tmatrix
-}
-
-
-proc ::rmsdtt::align_all {sel_text rmsd_base frames_ref} {
-  variable pdb_list
-  variable frames_sw
-  set all_mols [get_molid_from_pdb_list_to_operate_on]
   
+  # Buttons
+  frame $w.top.right
+  pack $w.top.right -side left -fill x
+
+  frame $w.top.right.pushfr -relief ridge -bd 2
+  pack $w.top.right.pushfr -side top -fill x -expand 1
+
+  button $w.top.right.rmsd -relief raised -bd 2 -text "RMSD" -command {::rmsdtt::doRmsd}
+  button $w.top.right.align -relief raised -bd 2 -text "Align" -command {::rmsdtt::doAlign}
+  pack $w.top.right.rmsd $w.top.right.align -side left -fill x -expand 1 -in $w.top.right.pushfr
   
-  foreach i $all_mols  {set sel($i) [atomselect $i $sel_text]}
-  # do the top molecule as well, just in case it's not in the list
-  set mol_on_top [molinfo top] 
-  set sel($mol_on_top) [atomselect $mol_on_top $sel_text]
+  frame $w.top.right.switch -relief ridge -bd 2
+  pack $w.top.right.switch -side top -fill x
 
-  switch $rmsd_base {
-    top {set reference_for_alignment $mol_on_top}
-    selected {set reference_for_alignment [lindex [$pdb_list get active] 0]}
-  }
+  radiobutton $w.top.right.switch.0 -text "Top" -variable [namespace current]::rmsd_base -value "top" -command ::rmsdtt::ctrlgui
+  radiobutton $w.top.right.switch.1 -text "Average" -variable [namespace current]::rmsd_base -value "ave" -command ::rmsdtt::ctrlgui
+  radiobutton $w.top.right.switch.2 -text "Selected" -variable [namespace current]::rmsd_base -value "selected" -command ::rmsdtt::ctrlgui
+  pack $w.top.right.switch.0 $w.top.right.switch.1 $w.top.right.switch.2 -side left -fill x -padx 2 -pady 2
 
-  set sel_ref [atomselect $reference_for_alignment $sel_text frame $frames_ref]
+  # Trajectory
+  frame $w.top.right.traj -relief ridge -bd 2
+  pack $w.top.right.traj -side top -fill x
 
-  foreach i $all_mols  {
-    if {$frames_sw == 0} {
-      if { $i != $reference_for_alignment } {
-	set j [molinfo $i get frame]
-	align $sel($i) $j $sel($reference_for_alignment)
+  frame $w.top.right.traj.frames -relief ridge -bd 0
+  pack $w.top.right.traj.frames -side top -fill x
+
+  checkbutton $w.top.right.traj.frames.0 -text "Trajectory" -variable [namespace current]::traj_sw -command ::rmsdtt::ctrlgui
+  label $w.top.right.traj.frames.reflabel -text "Frame ref:" -padx 3 -pady 3
+  entry $w.top.right.traj.frames.ref -bd 0 -selectborderwidth 0 -exportselection yes -width 5 -textvariable [namespace current]::traj_ref
+  checkbutton $w.top.right.traj.frames.all -text "All" -variable [namespace current]::traj_all -command ::rmsdtt::ctrlgui
+  pack $w.top.right.traj.frames.0 $w.top.right.traj.frames.reflabel $w.top.right.traj.frames.ref $w.top.right.traj.frames.all\
+    -side left -fill x -padx 2 -pady 2
+  
+  frame $w.top.right.traj.skip -relief ridge -bd 0
+  pack $w.top.right.traj.skip -side top -fill x
+
+  checkbutton $w.top.right.traj.skip.0 -text "Skip" -variable [namespace current]::skip_sw -command ::rmsdtt::ctrlgui
+  label $w.top.right.traj.skip.inilabel -text "Ini:" -padx 3 -pady 3
+  entry $w.top.right.traj.skip.ini -bd 0 -selectborderwidth 0 -exportselection yes -width 3 -textvariable [namespace current]::skip_ini
+  label $w.top.right.traj.skip.stepslabel -text "Steps:" -padx 3 -pady 3
+  entry $w.top.right.traj.skip.steps -bd 0 -selectborderwidth 0 -exportselection yes -width 3 -textvariable [namespace current]::skip_steps
+  pack $w.top.right.traj.skip.0 $w.top.right.traj.skip.inilabel $w.top.right.traj.skip.ini\
+    $w.top.right.traj.skip.stepslabel $w.top.right.traj.skip.steps\
+    -side left -fill x -padx 2 -pady 2
+
+  frame $w.top.right.traj.time -relief ridge -bd 0
+  pack $w.top.right.traj.time -side top -fill x
+
+  checkbutton $w.top.right.traj.time.0 -text "Time (ps)" -variable [namespace current]::time_sw -command ::rmsdtt::ctrlgui
+  label $w.top.right.traj.time.inilabel -text "Ini:" -padx 3 -pady 3
+  entry $w.top.right.traj.time.inival -bd 0 -selectborderwidth 0 -exportselection yes -width 6 -textvariable [namespace current]::time_ini
+  label $w.top.right.traj.time.steplabel -text "Step:" -padx 3 -pady 3
+  entry $w.top.right.traj.time.stepval -bd 0 -selectborderwidth 0 -exportselection yes -width 6 -textvariable [namespace current]::time_step
+  pack $w.top.right.traj.time.0 $w.top.right.traj.time.inilabel $w.top.right.traj.time.inival\
+    $w.top.right.traj.time.steplabel $w.top.right.traj.time.stepval\
+    -side left -fill x -padx 2 -pady 2
+
+  frame $w.top.right.traj.file -relief ridge -bd 0
+  pack $w.top.right.traj.file -side top -fill x
+
+  checkbutton $w.top.right.traj.file.plot -text "Plot" -variable [namespace current]::plot_sw
+  checkbutton $w.top.right.traj.file.0 -text "Save to file:" -variable [namespace current]::save_sw -command [namespace code {
+      if {$save_sw} {
+	$w.top.right.traj.file.name config -state normal
+      } else {
+	$w.top.right.traj.file.name config -state disable
       }
-    } else {
-      set jmax [molinfo $i get numframes]
-      for {set j 0} {$j < $jmax} {incr j} {
-	if { $i == $reference_for_alignment && $j == $frames_ref } {
-	} else {
-  	  align $sel($i) $j $sel_ref
-	}
-      }
-    }
-  }
-}
+    }]
+  entry $w.top.right.traj.file.name -bd 0 -selectborderwidth 0 -exportselection yes -width 15 -textvariable [namespace current]::save_file -state disable
+  pack $w.top.right.traj.file.plot $w.top.right.traj.file.0 $w.top.right.traj.file.name\
+    -side left -fill x -padx 2 -pady 2
 
 
-proc ::rmsdtt::ini_zero {length} {
-  if {$length<=0} return {}
+  # Scrollbar for the data
+  frame $w.scrbar
+  pack $w.scrbar -side right -expand 1 -fill y
 
-  set half_l [expr $length>>1]
-  set s {{0 0 0}}
-  for {set i 1} {$i<$half_l} {set i [expr $i<<1]} {
-    set s [concat $s $s]
-  }
+  scrollbar $w.scrbar.scrbar -relief raised -activerelief raised -bd 2 -elementborderwidth 2 -orient vert -command {rmsdtt::scroll_data}
+  pack $w.scrbar.scrbar -expand 1 -fill y
 
-  set more [expr $length-$i-1]
-  set s [concat $s [lrange $s 0 $more]]
-
-  return $s
-}
-
-
-proc ::rmsdtt::ave_struc {sel_text} {
-  set all_mols [get_molid_from_pdb_list_to_operate_on]
-  set n_mols [llength $all_mols]
-  set factor [expr 1./$n_mols]
-  set mol_on_top [molinfo top]
-
-  foreach i $all_mols {
-    set all_coor($i) [[atomselect $i $sel_text] get {x y z}]
-  }
+  # Data
+  frame $w.data -relief ridge -bd 2
+  pack $w.data -side top -expand 1 -fill both
   
-  set ave_coor {}
-  set m0 [lindex $all_mols 0]
-  set len [llength $all_coor($m0)]
+  grid columnconfigure $w.data 1 -weight 100
 
-  for {set j 0} {$j<$len} {incr j} {
-    set b [veczero]
-    foreach i $all_mols {
-      set b [vecadd $b [lindex $all_coor($i) $j]]
-    }
-    lappend ave_coor [vecscale $b $factor]
-  }
+  label $w.data.header_id  -text "id"  -width 2  -relief sunken -bd 1
+  label $w.data.header_mol -text "mol" -width 30 -relief sunken -bd 1
+  label $w.data.header_avg -text "avg" -width 7  -relief sunken -bd 1
+  label $w.data.header_sd  -text "sd"  -width 7  -relief sunken -bd 1
+  label $w.data.header_min -text "min" -width 7  -relief sunken -bd 1
+  label $w.data.header_max -text "max" -width 7  -relief sunken -bd 1
+  label $w.data.header_num -text "num" -width 4  -relief sunken -bd 1
+  grid $w.data.header_id  -column 0 -row 0
+  grid $w.data.header_mol -column 1 -row 0 -sticky we
+  grid $w.data.header_avg -column 2 -row 0
+  grid $w.data.header_sd  -column 3 -row 0
+  grid $w.data.header_min -column 4 -row 0
+  grid $w.data.header_max -column 5 -row 0
+  grid $w.data.header_num -column 6 -row 0
+  
+  set datalist(id)  [listbox $w.data.body_id  -height 10 -width 2  -relief sunken -bd 1 -yscrollcommand [namespace code {$w.scrbar.scrbar set}]]
+  set datalist(mol) [listbox $w.data.body_mol -height 10 -width 30 -relief sunken -bd 1 -yscrollcommand [namespace code {$w.scrbar.scrbar set}]]
+  set datalist(avg) [listbox $w.data.body_avg -height 10 -width 7  -relief sunken -bd 1 -yscrollcommand [namespace code {$w.scrbar.scrbar set}]]
+  set datalist(sd)  [listbox $w.data.body_sd  -height 10 -width 7  -relief sunken -bd 1 -yscrollcommand [namespace code {$w.scrbar.scrbar set}]]
+  set datalist(min) [listbox $w.data.body_min -height 10 -width 7  -relief sunken -bd 1 -yscrollcommand [namespace code {$w.scrbar.scrbar set}]]
+  set datalist(max) [listbox $w.data.body_max -height 10 -width 7  -relief sunken -bd 1 -yscrollcommand [namespace code {$w.scrbar.scrbar set}]]
+  set datalist(num) [listbox $w.data.body_num -height 10 -width 4  -relief sunken -bd 1 -yscrollcommand [namespace code {$w.scrbar.scrbar set}]]
+  grid $w.data.body_id  -column 0 -row 1
+  grid $w.data.body_mol -column 1 -row 1 -sticky we
+  grid $w.data.body_avg -column 2 -row 1
+  grid $w.data.body_sd  -column 3 -row 1
+  grid $w.data.body_min -column 4 -row 1
+  grid $w.data.body_max -column 5 -row 1
+  grid $w.data.body_num -column 6 -row 1
 
-  return $ave_coor
+  label $w.data.footer_id  -text ""                                        -width 2  -anchor e -relief sunken -bd 1
+  label $w.data.footer_mol -text "Totals:"                                 -width 30 -anchor e -relief sunken -bd 1
+  label $w.data.footer_avg -textvariable [namespace current]::datatot(avg) -width 7  -anchor e -relief sunken -bd 1
+  label $w.data.footer_sd  -textvariable [namespace current]::datatot(sd)  -width 7  -anchor e -relief sunken -bd 1
+  label $w.data.footer_min -textvariable [namespace current]::datatot(min) -width 7  -anchor e -relief sunken -bd 1
+  label $w.data.footer_max -textvariable [namespace current]::datatot(max) -width 7  -anchor e -relief sunken -bd 1
+  label $w.data.footer_num -textvariable [namespace current]::datatot(num) -width 4  -anchor e -relief sunken -bd 1
+  grid $w.data.footer_id  -column 0 -row 2
+  grid $w.data.footer_mol -column 1 -row 2 -sticky we
+  grid $w.data.footer_avg -column 2 -row 2
+  grid $w.data.footer_sd  -column 3 -row 2
+  grid $w.data.footer_min -column 4 -row 2
+  grid $w.data.footer_max -column 5 -row 2
+  grid $w.data.footer_num -column 6 -row 2
+
+  # Add/remove molecules from the list
+  frame $w.bottom
+  pack $w.bottom -side bottom -fill x -expand 1
+
+  button $w.bottom.delall -relief raised -bd 2 -text "Erase all" -command {rmsdtt::mol_del}
+  button $w.bottom.del -relief raised -bd 2 -text "Erase selected" -command {rmsdtt::mol_del 1}
+  button $w.bottom.addall -relief raised -bd 2 -text "Add all" -command {rmsdtt::mol_add}
+  button $w.bottom.add -relief raised -bd 2 -text "Add active" -command {rmsdtt::mol_add 1}
+  pack $w.bottom.delall $w.bottom.del $w.bottom.addall $w.bottom.add -side left -fill x -expand 1
+
+  # Final code
+  rmsdtt::mol_add 1
+  update_swap_types
+  ctrlgui
 }
 
 
-proc ::rmsdtt::compute_rms {sel_text {frames_ref 0}} {
-  variable rms_ave 
-  variable rms_disp 
-  variable pdb_list
-  variable rms_values
+proc rmsdtt::doRmsd {} {
+  variable traj_sw
+  variable traj_all
+  variable traj_ref
+  variable save_sw
+  variable plot_sw
   variable rmsd_base
-  
-  variable skip_sw
-  variable skip_ini
-  variable skip_steps
-  variable frames_sw
-  variable frames_all
-  variable rms_aveframe
-  # delete this variable mol_ref?
-  variable mol_ref
-  
-  array unset rms_values
+  variable swap_sw
+  variable swap_print
+  variable rmsd
+  variable ref_mol
+  variable ref_frames
+  variable rms_sel
+  variable datalist
+  variable datatot
+  variable stats
 
-  set all_mols [get_molid_from_pdb_list_to_operate_on]
-  set mol_on_top [molinfo top]
-  set n_mols [llength $all_mols]
-  # 1 will be subtracted from n_mols if the RMSD is calculated against the top molecule 
-  # and if the top molecule is part of the listed pdbs
-  # or the selected item in the pdb list, see below
-    
-  if {$sel_text == ""} {
+  # Parse selection
+  set rms_sel [set_sel]
+  if {$rms_sel == ""} {
     showMessage "Selection is empty selection!"
     return -code return
   }
+  #puts "DEBUG: rms_sel: $rms_sel"
 
-  # Check if the top molecule is listed in the pdb list.
-  set topisthere [lsearch $all_mols $mol_on_top]
-  foreach i $all_mols {
-    set jmax [molinfo $i get numframes]
-    set natoms($i) [[atomselect $i $sel_text frame 0] num]
-  }
-  # Check same number of atoms
-  foreach i $all_mols {
-    foreach j $all_mols {
-      if {$i < $j} {
-	if {$natoms($i) != $natoms($j)} {
-	  showMessage "Selections differ for molecules $i ($natoms($i)) and $j ($natoms($j))"
-	  return -code return
-	}
-      }
-    }
-  }
-  if {$topisthere < 0} {
-    set jmax [molinfo $mol_on_top get numframes]
-    set natomstop [[atomselect $mol_on_top $sel_text frame 0] num]
-    foreach i $all_mols {
-      if {$natoms($i) != $natomstop } {
-	showMessage "Selections differ for molecules $i ($natoms($i)) and top ($natomstop)"
-	return -code return
-      }
-    }
-  }
-    
-  
+  # Get reference mol/frames
   switch $rmsd_base {
     top {
-      set mol_ref $mol_on_top
-      if {$frames_sw == 0} {
-	set frames_ref [molinfo $mol_ref get frame]
-      } else {
-	set j $frames_ref
-	set n0 [molinfo $mol_ref get numframes]
-	if {$frames_ref >= $n0} {
-	  showMessage "Frame ref out of range (max is [expr $n0-1])"
-	  return -code return
-	}
-      }
-      if {$topisthere >= 0 && $frames_sw == 0} {incr n_mols -1}
+      set ref_mol [molinfo top]
     }
-  
     ave {
-      set mol_ref "ave"
-      set ref_coor {}
-
-      if {$frames_sw == 0} {
-	set m0 [lindex $all_mols 0]
-	set len [llength [[atomselect $m0 $sel_text frame 0] get {x y z}]]
-	set factor [expr 1./$n_mols]
-	for {set j 0} {$j<$len} {incr j} {
-	  set b [veczero]
-	  foreach i $all_mols {
-	    set k [molinfo $i get frame]
-	    set b [vecadd $b [lindex [[atomselect $i $sel_text frame $k] get {x y z}] $j]]
-	  }
-	  lappend ref_coor [vecscale $b $factor]
-	}
-      } else {
-	set len [llength [[atomselect $mol_on_top $sel_text frame 0] get {x y z}]]
-	set nframes [molinfo $mol_on_top get numframes]
-	set factor [expr 1./$nframes]
-	for {set j 0} {$j<$len} {incr j} {
-	  set b [veczero]
-	  for {set i 0} {$i < $nframes} {incr i} {
-	    set b [vecadd $b [lindex [[atomselect $mol_on_top $sel_text frame $i] get {x y z}] $j]]
-	  }
-	  lappend ref_coor [vecscale $b $factor]
-	}
-
-      }
-
-      puts [lindex $ref_coor 0]
+      set ref_mol "ave"
     }
-  
     selected {
-      set index [lindex [$pdb_list get active] 0]
-      set mol_ref $index
-      if {$frames_sw == 0} {
-	incr n_mols -1
-	set j [molinfo $index get frame]
+      set ref_mol [$datalist(mol) index active]
+    }
+  }
+  if {$rmsd_base == "ave"} {
+    set ref_frames 0
+  } else {
+    set ref_frames {}
+    if {$traj_sw} {
+      if {$traj_all} {
+	for {set i 0} {$i < [molinfo $ref_mol get numframes]} {incr i} {
+	  lappend ref_frames $i
+	}
       } else {
-	set j $frames_ref
-	set n0 [molinfo $mol_ref get numframes]
-	if {$frames_ref >= $n0} {
-	  showMessage "Frame ref out of range (max is [expr $n0-1])"
+	if {$traj_ref >= [molinfo $ref_mol get numframes]} {
+	  showMessage "Frame ref out of range (max is [expr [molinfo $ref_mol get numframes]-1])"
 	  return -code return
 	}
+	lappend ref_frames $traj_ref
       }
+    } else {
+      lappend ref_frames [molinfo $ref_mol get frame]
     }
   }
 
-  set tot_rms 0
+  #puts "DEBUG: ref_mol: $ref_mol"
+  #puts "DEBUG: ref_frames: $ref_frames"
   
-  # for each molecule
-  foreach i $all_mols {
-    set jmax [molinfo $i get numframes]
-    if {$frames_sw == 0} { set jmax 1 }
-
-    set rms_ave($i) 0
-
-    # for each frame
-    if {$frames_sw == 1 && $skip_sw == 1} {
-      set skipped_tot $skip_ini
-      set skipped $skip_steps
-    }
-    for {set j 0} {$j < $jmax} {incr j} {
-      if {$frames_sw == 1 && $skip_sw == 1} {
-	if {$j < $skip_ini} {continue}
-	if {$skipped < $skip_steps} {
-	  incr skipped
-	  incr skipped_tot
-	  continue
-	} else {
-	  set skipped 0
-	}
-      }
-      if {$frames_sw == 0} {set j [molinfo $i get frame]}
-      if {$rmsd_base == "ave"} {
-	set rmsd [get_rmsd_ave $ref_coor $i $j $sel_text]
-      } else {
-	set rmsd [get_rmsd $mol_ref $frames_ref $i $j $sel_text]
-      }
-      set rms_values($i,$j) $rmsd
-      set rms_ave($i) [expr $rms_ave($i) + $rmsd]
-    }
-    
-    if {$frames_sw == 1 && $skip_sw == 1} {set jmax [expr $jmax - $skipped_tot]}
-    if {$frames_sw == 1 && $mol_ref == $i && $jmax > 1} {incr jmax -1}
-    set rms_ave($i) [expr $rms_ave($i)/$jmax]
-    set tot_rms [expr $tot_rms + $rms_ave($i)]
+  # Get target mol/frames
+  # Get all mols to work with
+  set target_mol [$datalist(id) get 0 end]
+  #puts "DEBUG: target_mol: $target_mol"
+  
+  # Calculate average structure
+  if {$rmsd_base == "ave"} {
+    set ave_coor [get_ave_coor $target_mol $rms_sel]
+    #puts $ave_coor
   }
 
-  set tot_rms [expr $tot_rms/$n_mols]
+  # Check number of atoms
+  if {$rmsd_base == "ave"} {
+    set ref_natoms [llength $ave_coor]
+  } else {
+    set ref_natoms [[atomselect $ref_mol $rms_sel frame 0] num]
+  }
+  if {$ref_natoms == 0} {
+    showMessage "No atoms have been selected!"
+    return -code return
+  }
 
-  return $tot_rms
+  set message ""
+  foreach i $target_mol {
+    if {[[atomselect $i $rms_sel frame 0] num] != $ref_natoms } {
+      append message "$ref_mol ($ref_natoms)\t\t$i ([[atomselect $i $rms_sel frame 0] num])\n"
+    }
+  }
+  if {$message != ""} {
+    set message "Number of atoms selected differ for molecules:\n$message"
+    showMessage $message
+    return -code return
+  }
+
+  # Calculate rmsd and averages
+  array unset rmsd
+  array unset rms_ave
+  array unset rms_val
+  set rms_tot 0.0
+  if {$rmsd_base != "ave"} {
+    set ref_sel [atomselect $ref_mol $rms_sel]
+  }
+  foreach i $target_mol {
+    set target_frames [[namespace current]::get_frames_for_mol $i]
+    #puts "DEBUG: target_frames($i): $target_frames"
+    set target_sel [atomselect $i $rms_sel]
+    set rms_ave($i) 0.0
+    foreach j $ref_frames {
+      if {$rmsd_base != "ave"} {
+	$ref_sel frame $j
+      }
+      foreach k $target_frames {
+	if {$ref_mol == $i && $j == $k} {
+	  continue
+	}
+	#puts -nonewline "DEBUG: computing rmsd($ref_mol:$j,$i:$k)"
+	$target_sel frame $k
+	if {$rmsd_base == "ave"} {
+	  set rmsd($ref_mol:$j,$i:$k) [get_rmsd_ave $ave_coor $target_sel]
+	} else {
+	  set rmsd($ref_mol:$j,$i:$k) [get_rmsd $ref_sel $target_sel]
+	}
+	#puts "   = $rmsd($ref_mol:$j,$i:$k)"
+	set rms_ave($i) [expr $rms_ave($i) + $rmsd($ref_mol:$j,$i:$k)]
+      }
+    }
+    set rms_tot [expr $rms_tot + $rms_ave($i)]
+    set count($i) [llength [array names rmsd *,$i:*]]
+    #puts "DEBUG: rms_sum($i) = $rms_ave($i) ; count($i) = $count($i)"
+    if {$count($i) != 0} {
+      set rms_ave($i) [expr $rms_ave($i)/$count($i)]
+    }
+    #puts "DEBUG: rms_ave($i) = $rms_ave($i)"
+  }
+  set rms_tot [expr $rms_tot/[array size rmsd]]
+  #puts "DEBUG: rms_tot = $rms_tot (count = [array size rmsd])"
+
+  # Calculate statistics: standard deviation, min and max
+  if {$stats} {
+    set sd_tot 0.0
+    set random $rmsd([lindex [array names rmsd] 0])
+    set min_tot $random
+    set max_tot $random
+    foreach i $target_mol {
+      set rms_sd($i) 0.0
+      if {$count($i) == 0} {
+	set rms_min($i) 0.0
+	set rms_max($i) 0.0
+	continue
+      }
+      set random $rmsd([lindex [array names rmsd *,$i:*] 0])
+      set rms_min($i) $random
+      set rms_max($i) $random
+      foreach data [array names rmsd *,$i:*] {
+	set temp [expr $rmsd($data) - $rms_ave($i)]
+	set rms_sd($i) [expr $rms_sd($i) + $temp*$temp]
+	if {$rmsd($data) < $rms_min($i) } {set rms_min($i) $rmsd($data)}
+	if {$rmsd($data) > $rms_max($i) } {set rms_max($i) $rmsd($data)}
+      }
+      set sd_tot [expr $sd_tot + $rms_sd($i)]
+      if {$count($i) == 1} {
+	set rms_sd($i) [expr sqrt( $rms_sd($i) / $count($i) )]
+      } else {
+	set rms_sd($i) [expr sqrt( $rms_sd($i) / ($count($i)-1) )]
+      }
+      #puts "DEBUG: rms_sd($i) = $rms_sd($i)"
+      if {$rms_min($i) < $min_tot} {set min_tot $rms_min($i)}
+      if {$rms_max($i) > $max_tot} {set max_tot $rms_max($i)}
+    }
+    set sd_tot [expr sqrt($sd_tot / ([array size rmsd] - 1))]
+    #puts "DEBUG: sd_tot = $sd_tot"
+  }
+
+  # Reveal values in GUI
+  foreach v [array names datalist] {
+    $datalist($v) delete 0 end
+  }
+  foreach i $target_mol {
+    $datalist(id)  insert end [format "%2s"    $i]
+    $datalist(mol) insert end [format "%s"     [molinfo $i get name]]
+    $datalist(avg) insert end [format "%10.3f" $rms_ave($i)]
+    if {$stats} {
+      $datalist(sd)  insert end [format "%7.3f"  $rms_sd($i)]
+      $datalist(min) insert end [format "%10.3f" $rms_min($i)]
+      $datalist(max) insert end [format "%10.3f" $rms_max($i)]
+      $datalist(num) insert end [format "%5d"    $count($i)]
+    } else {
+      $datalist(sd)  insert end ""
+      $datalist(min) insert end ""
+      $datalist(max) insert end ""
+      $datalist(num) insert end ""
+    }
+  }
+  set datatot(avg) [format "%10.3f" $rms_tot]
+  if {$stats} {
+    set datatot(sd)  [format "%7.3f"  $sd_tot]
+    set datatot(min) [format "%10.3f" $min_tot]
+    set datatot(max) [format "%10.3f" $max_tot]
+    set datatot(num) [format "%5d"    [array size rmsd]]
+  }
+
+  rmsdtt::color_data
+
+  # Save and plot data
+  if {$save_sw} { saveData $save_file }
+  if {$plot_sw && !$traj_all} { doPlot }
+
+  #puts "DEBUG: ---------------------------------"
+
+  ListHisotryPullDownMenu
 }
 
-proc ::rmsdtt::get_rmsd { mol1 frame1 mol2 frame2 sel_text } {
+
+proc rmsdtt::get_rmsd { sel1 sel2 } {
   variable swap_sw
   variable swap_print
 
-  set sel1 [atomselect $mol1 $sel_text frame $frame1] 
-  set sel2 [atomselect $mol2 $sel_text frame $frame2]
   set rmsd [measure rmsd $sel1 $sel2]
 
-  set swapped ""
   if {$swap_sw} {
+    if {$swap_print} {
+      puts "\nDEBUG: Swapped residues:"
+    }
+    set swapped {}
+    set mol2 [$sel2 molid]
+    set frame2 [$sel2 frame]
+    set sel_text [$sel2 text]
     set res [lsort -unique -integer [[atomselect $mol2 "$sel_text and resname [array names ::swap::swap_list]" frame $frame2] get residue]]
     foreach r $res {
       set s [atomselect $mol2 "residue $r"]
@@ -407,213 +562,263 @@ proc ::rmsdtt::get_rmsd { mol1 frame1 mol2 frame2 sel_text } {
   return $rmsd
 }
 
-proc ::rmsdtt::get_rmsd_ave { ref_coor mol2 frame2 sel_text } {
-  set sel2 [atomselect $mol2 $sel_text frame $frame2]
-  set coor2 [$sel2 get {x y z}]
-  set numatoms [llength $ref_coor]
 
-  set rmsd 0
-  # for each atom
-  for {set k 0} {$k < $numatoms} {incr k} {
-    set v1 [lindex $ref_coor $k]
-    set v2 [lindex $coor2 $k]
-    set rmsd [expr $rmsd + [veclength2 [vecsub $v1 $v2]]]
-  }
-  set rmsd [expr $rmsd/$numatoms]
-  set rmsd [expr sqrt($rmsd)]
-  
-  return $rmsd
-}
+proc rmsdtt::get_ave_coor {mols sel_text} {
+  variable traj_sw
 
-proc ::rmsdtt::reveal_rms {} {
-  variable rms_ave 
-  variable rms_list 
- 
-  set all_mols [get_molid_from_pdb_list_to_operate_on]
-  $rms_list delete 0 end
-  foreach i $all_mols {
-    $rms_list insert end $rms_ave($i)
-  }
-}
+  set natoms [[atomselect [lindex $mols 0] $sel_text frame 0] num]
 
-
-
-proc ::rmsdtt::two_scroll args {
-  variable pdb_list 
-  variable rms_list
-  eval "$pdb_list yview $args"
-  eval "$rms_list yview $args"
-}
-
-
-proc ::rmsdtt::onlyactive args {
-  variable pdb_list 
-  variable rms_list
-  $pdb_list delete 0 end
-  $rms_list delete 0 end
-  for {set i 0} {$i < [molinfo num]} {incr i} {
-    set molid [molinfo index $i]
-    if {[molinfo $molid get active]} {$pdb_list insert end [format "%-4s%-10s" $molid [molinfo $molid get name]]}      
-  }
-}
-
-
-# This gets called by VMD the first time the menu is opened.
-proc rmsdtt_tk_cb {} {
-  variable foobar
-  # Don't destroy the main window, because we want to register the window
-  # with VMD and keep reusing it.  The window gets iconified instead of
-  # destroyed when closed for any reason.
-  #set foobar [catch {destroy $::rmsdtt::w  }]  ;# destroy any old windows
-
-  ::rmsdtt::rmsdtt   ;# start the RMSD Tool
-  return $rmsdtt::w
-}
-
-proc rmsdtt::showMessage {mess} {
-  bell
-  toplevel .messpop 
-  grab .messpop
-  option add *Font {Helvetica -12 bold}
-  wm title .messpop "Warning"
-    message .messpop.msg -relief groove -bd 2 -text $mess -aspect 400 -justify center -padx 20 -pady 20
-  
-  button .messpop.okb -text OK -command {destroy .messpop ; return 0}
-  pack .messpop.msg .messpop.okb -side top 
-}
-
-
-proc rmsdtt::set_sel {} {
-  variable w
-  variable bb_only
-  variable trace_only
-  variable noh
-  variable swap_sw
-
-#  set a [$w.top.left.inner.selfr.sel get 1.0 end]
-#  puts "a <$a>"
-  regsub -all "\#.*?\n" [$w.top.left.inner.selfr.sel get 1.0 end] "" temp1
-  regsub -all "\n" $temp1 " " temp2
-  regsub -all " $" $temp2 "" temp3
-#  puts "c <$temp3>"
-  if { $trace_only } {
-    append rms_sel "($temp3) and name CA"
-  } elseif { $bb_only } {
-    append rms_sel "($temp3) and name C CA N"
-  } elseif { $noh || $swap_sw} {
-    append rms_sel "($temp3) and noh"
-  } else {
-    append rms_sel $temp3
-  }
-  return $rms_sel
-}
-
-proc rmsdtt::ListHisotryPullDownMenu {} {
-  variable RMSDhistory
-  set rc_win .rmsdtt.top.left.inner
-  $rc_win.selectionhistory.m delete 0 end
-  foreach sel $RMSDhistory {
-  	$rc_win.selectionhistory.m add command -label $sel \
-  	 -command [list rmsdtt::chooseHistoryItem $sel]
-  }
-}
-
-
-proc ::rmsdtt::chooseHistoryItem {sel} {
-  variable rms_sel
-  set rms_sel $sel
-}
-
-
-proc ::rmsdtt::saveDataAll {frame_ref file_out_id time_ref} {
-  variable rms_values
-  variable time_sw
-  variable time_ini
-  variable time_step
-
-  set all_mols [get_molid_from_pdb_list_to_operate_on]
-  set n_mols [llength $all_mols]
-  
-  if {$n_mols > 1} {
-    foreach i $all_mols {
-      set nframes [molinfo $i get numframes]
-      for {set j 0} {$j < $nframes} {incr j} {
-	if {$time_sw} {
-	  set time [expr $time_ini + $time_step * $j]
-	  puts $file_out_id [format "%8.2f\t%3d\t%8.2f\t%10.7f" $frame_ref $i $time $rms_values($i,$j)]
-	} else {
-	  puts $file_out_id [format "%5d\t%3d\t%5d\t%10.7f" $frame_ref $i $j $rms_values($i,$j)]
+  set initialize 1
+  set ave_coor {}
+  set tot_frames 0
+  foreach i $mols {
+    set nframes [molinfo $i get numframes]
+    if {$traj_sw && $nframes > 1} {
+      set avpos [measure avpos [atomselect $i $sel_text] 0 [expr $nframes-1] 1]
+      #puts "$i avpos: $avpos"
+      if {$initialize} {
+	for {set j 0} {$j < $natoms} {incr j} {
+	  lappend ave_coor [vecscale [lindex $avpos $j] $nframes]
+	}
+	set initialize 0
+      } else {
+	for {set j 0} {$j < $natoms} {incr j} {
+	  lset ave_coor $j [vecadd [lindex $ave_coor $j] [vecscale [lindex $avpos $j] $nframes]]
+	}
+      }
+    } else {
+      set coor [[atomselect $i $sel_text frame [molinfo $i get frame]] get {x y z}]
+      #puts "$i coor: $coor"
+      set nframes 1
+      if {$initialize} {
+	set ave_coor $coor
+	set initialize 0
+      } else {
+	for {set j 0} {$j < $natoms} {incr j} {
+	  lset ave_coor $j [vecadd [lindex $ave_coor $j] [lindex $coor $j]]
 	}
       }
     }
-  } else {
-    set nframes [molinfo $all_mols get numframes]
-    for {set j 0} {$j < $nframes} {incr j} {
-      puts -nonewline $file_out_id [format "%6.2f " $rms_values($all_mols,$j)]
-    }
-    puts $file_out_id ""
+    set tot_frames [expr $tot_frames + $nframes]
+    #puts "$i sum: $ave_coor"
   }
   
+  #puts "tot_frames: $tot_frames"
+  for {set j 0} {$j < $natoms} {incr j} {
+    lset ave_coor $j [vecscale [lindex $ave_coor $j] [expr 1./$tot_frames]]
+  }
+  #puts "AVE_COOR: $ave_coor"
+  
+  return $ave_coor
 }
 
 
-proc ::rmsdtt::saveData {} {
-  variable rms_values
-  variable file_out
+proc rmsdtt::get_rmsd_ave {ref_coor target_sel} {
+  set target_coor [$target_sel get {x y z}]
+  set numatoms [llength $ref_coor]
+  set rmsd 0
+  # for each atom
+  for {set k 0} {$k < $numatoms} {incr k} {
+    set rmsd [expr $rmsd + [veclength2 [vecsub [lindex $ref_coor $k] [lindex $target_coor $k]]]]
+  }
+  set rmsd [expr sqrt($rmsd/$numatoms)]
+
+  return $rmsd
+}
+
+
+proc rmsdtt::doAlign {} {
+  variable w
+  variable rmsd_base
+  variable traj_ref
+  variable traj_sw
+  variable traj_all
+  variable datalist
+  
+  if {$traj_all} {
+    showMessage "All option not available for Alignment! Deselect it and select a frame reference."
+    return -code return
+  }
+
+  switch $rmsd_base {
+    top {
+      set ref_mol [molinfo top]
+    }
+    selected {
+      set ref_mol [$datalist(mol) index active]
+    }
+    ave {
+      showMessage "Average option not available for Alignment!"
+      return -code return
+    }
+  }
+
+  set rms_sel [set_sel]
+  set sel_ref [atomselect $ref_mol $rms_sel frame $traj_ref]
+  set target_mol [$datalist(id) get 0 end]
+  foreach i $target_mol  {
+    set sel [atomselect $i $rms_sel]
+    if {$traj_sw == 0} {
+      if {$i != $ref_mol} {
+	align $sel [molinfo $i get frame] $sel_ref
+      }
+    } else {
+      for {set j 0} {$j < [molinfo $i get numframes]} {incr j} {
+	if {$i != $ref_mol && $j != $traj_ref} {
+	  align $sel $j $sel_ref
+	}
+      }
+    }
+  }
+}
+
+
+proc rmsdtt::align { sel1 frame1 sel2} {
+  $sel1 frame $frame1
+  set tmatrix [measure fit $sel1 $sel2]
+  set move_sel [atomselect [$sel1 molid] "all" frame $frame1]
+  $move_sel move $tmatrix
+  return $tmatrix
+}
+
+
+proc rmsdtt::SaveDataBrowse {} {
+  variable rmsd
+
+  if {![array exists rmsd]} {
+    showMessage "No data available to save yet!"
+    return -code return
+  }
+
+  set typeList {
+    {"Data Files" ".dat .txt .out"}
+    {"Postscript Files" ".ps"}
+    {"All files" ".*"}
+  }
+  
+  set file [tk_getSaveFile -filetypes $typeList -defaultextension ".dat" -title "Select file to save data" -parent .rmsdtt]
+  
+  if {$file == ""} {
+    return
+  }
+  
+  [namespace current]::saveData $file
+}
+
+
+proc rmsdtt::saveData { file } {
+  variable traj_sw
+  variable traj_all
   variable time_sw
   variable time_ini
   variable time_step
   variable skip_sw
   variable skip_ini
   variable skip_steps
-  
-  set file_out_id [open $file_out w]
-  fconfigure $file_out_id -buffering line
+  variable rmsd
+  variable ref_mol
+  variable ref_frames
 
-  set all_mols [get_molid_from_pdb_list_to_operate_on]
-  set n_mols [llength $all_mols]
+  if {$file == ""} {
+    showMessage "Filename is missing!"
+    return -code return
+  }
 
-  if {$time_sw} {
-    puts -nonewline $file_out_id "time"
+  if {$skip_sw} {
+    set ini $skip_ini
+    set steps [expr $skip_steps+1]
   } else {
-    puts -nonewline $file_out_id "frame"
+    set ini 0
+    set steps 1
   }
-  set jmaxmax 1
-  foreach i $all_mols {
-    set jmax($i) [molinfo $i get numframes]
-    if {$jmax($i) > $jmaxmax} {set jmaxmax $jmax($i)}
-    puts -nonewline $file_out_id [format " %10s" "mol$i"]
-  }
-  puts $file_out_id ""
-  
-  for {set j 0} {$j < $jmaxmax} {incr j} {
-    if {![info exists rms_values([lindex $all_mols 0],$j)]} {continue}
-    if {$time_sw} {
-      set time [expr $time_ini + $time_step * $j]
-      puts -nonewline $file_out_id [format "%8.2f" $time]
-    } else {
-      puts -nonewline $file_out_id [format "%5d" $j]
+
+  # Retrieve mols and frames
+  set maxframe 0
+  foreach key [array names rmsd] {
+    set indices [split $key :,]
+    set mol [lindex $indices 2]
+    set frame [lindex $indices 3]
+    lappend target_mol $mol
+    lappend target_frames($mol) $frame
+    if {$frame > $maxframe} {
+      set maxframe $frame
     }
-    foreach i $all_mols {
-      set jmax($i) [molinfo $i get numframes]
-#      puts -nonewline "$j $i $jmax($i) $jmaxmax"
-      if {$j < $jmax($i)} {
-#	puts [format " %10.7f" $rms_values($i,$j)]
-	puts -nonewline $file_out_id [format " %10.7f" $rms_values($i,$j)]
-      } else {
-#	puts [format " %10s" {NA}]
-	puts -nonewline $file_out_id [format " %10s" {NA}]
-      }
-     }
-     puts $file_out_id ""
   }
-  puts $file_out_id ""
-    
-  close $file_out_id
+  set target_mol [lsort -unique -integer $target_mol]
+  foreach i $target_mol {
+    set target_frames($i) [lsort -unique -integer $target_frames($i)]
+  }
   
+  if {$traj_sw && $traj_all} {
+    # Header
+    if {$time_sw} {
+      set output "ref_mol\tref_time\tmol\t    time\t   rmsd\n"
+    } else {
+      set output "ref_mol\tref_frame\tmol\tframe\t   rmsd\n"
+    }
+   
+    foreach k $ref_frames {
+      set ref_time [expr $time_ini + $time_step * $k]
+      foreach i $target_mol {
+	foreach j $target_frames($i) {
+	  if {![info exists rmsd($ref_mol:$k,$i:$j)]} {
+	    continue
+	  }
+	  if {$time_sw} {
+	    set time [expr $time_ini + $time_step * $j]
+	    append output [format "%7d\t%8.2f\t%3d\t%8.2f\t" $ref_mol $ref_time $i $time]
+	  } else {
+	    append output [format "%7d\t%9d\t%3d\t%5d\t" $ref_mol $k $i $j]
+	  }
+	  append output [format "%7.3f\n" $rmsd($ref_mol:$k,$i:$j)]
+	}
+      }
+    }
+    
+  } else {
+    set ref "$ref_mol:[lindex $ref_frames 0]"
+
+    # Header
+    if {$time_sw} {
+      set output "time"
+    } else {
+      set output "frame"
+    }
+    foreach i $target_mol {
+      append output [format " %7s" "mol$i"]
+    }
+    append output "\n"
+    
+    # Data
+    for {set j $ini} {$j <= $maxframe} {incr j $steps} {
+      if {$time_sw} {
+	set time [expr $time_ini + $time_step * $j]
+	append output [format "%8.2f" $time]
+      } else {
+	append output [format "%5d" $j]
+      }
+      
+      foreach i $target_mol {
+	if {[info exists rmsd($ref,$i:$j)]} {
+	  append output [format " %7.3f" $rmsd($ref,$i:$j)]
+	} else {
+	  append output [format " %7s" {NA}]
+	}
+      }
+      
+      append output "\n"
+    }
+  }
+
+  # Save to file
+  set fileout_id [open $save_file w]
+  fconfigure $fileout_id
+  puts $fileout_id $output
+  close $fileout_id
 }
 
-proc ::rmsdtt::tempfile {prefix suffix} {
+
+proc rmsdtt::tempfile {prefix suffix} {
   # From wiki.tcl.tk/772
   set chars "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
   set nrand_chars 10
@@ -654,117 +859,105 @@ proc ::rmsdtt::tempfile {prefix suffix} {
   }
 }
 
-proc ::rmsdtt::doRmsd {} {
-  variable w
-  variable rmsd_base
-  variable rms_sel
-  variable frames_sw
-  variable frames_all
-  variable frames_ref
-  variable file_out_sw
-  variable file_out
-  variable plot_sw
-  variable RMSDhistory
-  variable tot_rms
-  variable rms_values
-  variable time_sw
-  variable time_ini
-  variable time_step
 
-  if {$frames_sw && $file_out_sw && $file_out == ""} {
-    showMessage "Filename is missing!"
-    return -code return
-  }
-
-  set rms_sel [set_sel]
-
-  if {$frames_all} {
-    switch $rmsd_base {
-      top {
-	set mol_ref [molinfo top]
-	set nframes [molinfo $mol_ref get numframes]
-      }
-      ave {
-	set mol_ref "ave"
-	set nframes [molinfo [molinfo top] get numframes]
-      }
-      selected {
-	set index [lindex [$pdb_list get active] 0]
-	set mol_ref $index
-	set nframes [molinfo $mol_ref get numframes]
-      }
-    }
-    set all_mols [get_molid_from_pdb_list_to_operate_on]
-    set n_mols [llength $all_mols]
-    if {$frames_sw && $file_out_sw} {
-      set file_out_id [open $file_out w]
-      fconfigure $file_out_id -buffering line
-      if {$n_mols > 1} {
-	if {$time_sw} {
-	  puts $file_out_id "time_ref mol\ttime\trmsd"
-	} else {
-	  puts $file_out_id "frame_ref mol\tframe\trmsd"
-	}
-      }
-    }
-    for {set k 0} {$k < $nframes} {incr k} {
-      set tot_rms [compute_rms $rms_sel $k]
-      if {$frames_sw} {
-	if {$file_out_sw} {
-	  set time_ref [expr $time_ini + $time_step * $k]
-	  saveDataAll $k $file_out_id $time_ref
-	}
-	#if {$n_mols == 1} {
-	#  if {$plot_sw} {doPlotAll}
-	#}
-      }
-      
-    }
-    if {$frames_sw && $file_out_sw} {
-      close $file_out_id
-    }
-    
-  } else {
-    set tot_rms [compute_rms $rms_sel $frames_ref]
-    reveal_rms
-    if {$frames_sw} {
-      if {$file_out_sw} {saveData}
-      if {$plot_sw} {doPlot}
-    }
-  }
-  lappend RMSDhistory $rms_sel
-  ListHisotryPullDownMenu
-}
-
-proc ::rmsdtt::doAlign {} {
-  variable w
-  variable rmsd_base
-  variable rms_sel
-  variable frames_ref
-  
-  if {$rmsd_base=="ave"} {
-    showMessage "Average option not available for Alignment in this version"
-    return -code return
-  }
-  set rms_sel [set_sel]
-  align_all $rms_sel $rmsd_base $frames_ref
-}
-
-proc ::rmsdtt::doPlot {} {
-  variable rms_values
+proc rmsdtt::doPlot {} {
+  variable rmsd
   variable rms_sel
   variable time_sw
   variable time_ini
-  variable time_step
+  variable time_steps
+  variable skip_sw
+  variable skip_ini
+  variable skip_steps
+  variable ref_mol
+  variable ref_frames
+  variable plot_program
   global tcl_platform
   
-  set all_mols [get_molid_from_pdb_list_to_operate_on]
-  set n_mols [llength $all_mols]
+  if {![array exists rmsd]} {
+    showMessage "No data available to plot yet!"
+    return -code return
+  }
+  
 
-  switch $tcl_platform(platform) {
-    unix {
-      # parray rms_values
-      # set pipe_id [open "| xmgrace -pipe &" w]
+  if {$skip_sw} {
+    set ini $skip_ini
+    set steps [expr $skip_steps+1]
+  } else {
+    set ini 0
+    set steps 1
+  }
+
+  # Retrieve mols and frames
+  set maxframe 0
+  foreach key [array names rmsd] {
+    set indices [split $key :,]
+    set mol [lindex $indices 2]
+    set frame [lindex $indices 3]
+    lappend target_mol $mol
+    lappend target_frames($mol) $frame
+    if {$frame > $maxframe} {
+      set maxframe $frame
+    }
+  }
+  set target_mol [lsort -unique -integer $target_mol]
+  foreach i $target_mol {
+    set target_frames($i) [lsort -unique -integer $target_frames($i)]
+  }
+  
+  # Prepare sets
+  set ref "$ref_mol:[lindex $ref_frames 0]"
+  foreach i $target_mol {
+    for {set j $ini} {$j <= $maxframe} {incr j $steps} {
+      if {[info exists rmsd($ref,$i:$j)]} {
+	if {$time_sw} {
+	  lappend x($i) [expr $time_ini + $time_step * $j]
+	} else {
+	  lappend x($i) $j
+	}
+	lappend y($i) $rmsd($ref,$i:$j)
+      }
+    }
+  }
+  
+
+  # Multiplot
+  # ---------
+  if {$plot_program == "multiplot"} {
+    if [catch {package require multiplot} msg] {
+      showMessage "Plotting in Multiplot not available: package multiplot not installed!\nDo you have the latest VMD version?"
+      return
+    }
+    
+    if {$time_sw} {
+      set title "Rmsd vs Time"
+      set xlab "Time (ps)"
+    } else {
+      set title "Rmsd vs Frame"
+      set xlab "Frame"
+    }
+    set ylab "Rmsd (A)"
+    set plothandle [multiplot -title $title -xlabel $xlab -ylabel $ylab -nostats]
+    
+    set k 0
+    foreach i $target_mol {
+      set color [lindex [colorinfo colors] $k]
+      set iname "[molinfo $i get name] ($i)"
+      
+      if {[llength $y($i)] == 1} {
+	$plothandle add $x($i) $y($i) -marker circle -radius 4 -nolines -fillcolor $color -linecolor $color -nostats -legend $iname
+      } else {
+	$plothandle add $x($i) $y($i) -marker point -radius 2 -fillcolor $color -linecolor $color -nostats -legend $iname
+      }
+      incr k
+    }
+    $plothandle replot
+
+
+    # Xmgrace
+    # -------
+  } elseif {$plot_program == "xmgrace"} {
+    if {$tcl_platform(platform) == "unix" } {
       
       set f [tempfile rmsdtt .tmp]
       set filename [lindex $f 0]
@@ -787,30 +980,20 @@ proc ::rmsdtt::doPlot {} {
       puts $pipe_id "@ view 0.15, 0.15, 0.75, 0.85"
       puts $pipe_id "@ legend on"
       puts $pipe_id "@ legend box on"
+
       set k 0
-      foreach i $all_mols {
-	set iname [molinfo $i get name]
-	puts $pipe_id "@ s$k legend \"$iname ($i)\""
-	set jmax [molinfo $i get numframes]
-	if {$jmax == 1} {
+      foreach i $target_mol {
+	set iname "[molinfo $i get name] ($i)"
+	puts $pipe_id "@ s$k legend \"$iname\""
+	if {[llength $y($i)] == 1} {
 	  puts $pipe_id "@ s$k symbol 1"
 	}
-	for {set j 0} {$j < $jmax} {incr j} {
-	  if {![info exists rms_values($i,$j)]} {continue}
-	  if {$time_sw} {
-	    set time [expr $time_ini + $time_step * $j]
-	    puts $pipe_id "$time $rms_values($i,$j)"
-	  } else {
-	    puts $pipe_id "$j $rms_values($i,$j)"
-	  }
+	for {set j 0} {$j < [llength $y($i)]} {incr j} {
+	  puts $pipe_id "[lindex $x($i) $j] [lindex $y($i) $j]"
 	}
-	puts $pipe_id ""
-	set k [expr $k+1]
-	
+      	puts $pipe_id ""
+	incr k
       }
-      #  foreach i [lsort -dictionary [array names rms_values]] {
-      #    #puts $i:$rms_values($i)
-      #  }
       
       close $pipe_id
       set status [catch {exec xmgrace $filename &} msg]
@@ -819,10 +1002,19 @@ proc ::rmsdtt::doPlot {} {
 	file delete -force $filename
 	return -code return
       } 
+    } else {
+      showMessage "Plotting in Xmgrace only availabe for Unix systems"
     }
-    windows {
-      package require tcom
-      
+
+
+    # Excel
+    # -----
+  } elseif {$plot_program == "excel"} {
+    if {$tcl_platform(platform) == "windows" } {
+      if [catch {package require tcom} msg] {
+	showMessage "Plotting in MS Excel not available: package tcom not installed!\nFollow instruction at http://physiology.med.cornell.edu/faculty/hweinstein/vmdplugins/rmsdtt/index.html#RMSDTT_install"
+	return
+      }
       set excel [::tcom::ref createobject "Excel.Application"]
       #set excel [::tcom::ref getactiveobject "Excel.Application"]
       $excel Visible 1
@@ -836,43 +1028,30 @@ proc ::rmsdtt::doPlot {} {
       $worksheet Name "RMSDTT data"
       
       set cells [$worksheet Cells]
-      set jmaxmax 1
-      foreach i $all_mols {
-	set jmax($i) [molinfo $i get numframes]
-	if {$jmax($i) > $jmaxmax} {set jmaxmax $jmax($i)}
-      }
       if {$time_sw} {
-	$cells Item 1 1 "Time (ps)"
-	set time $time_ini
-	for {set j 0} {$j < $jmaxmax} {incr j} {
-	  $cells Item [expr $j+2] 1 $time
-	  set time [expr $time + $time_step]
-	}
 	set exceltitle "Rmsd vs Time"
+	$cells Item 1 1 "Time (ps)"
       } else {
-	$cells Item 1 1 "Frame"
-	for {set j 0} {$j < $jmaxmax} {incr j} {
-	  $cells Item [expr $j+2] 1 $j
-	}
 	set exceltitle "Rmsd vs Frame"
+	$cells Item 1 1 "Frame"
       }
-      set k 1
-      foreach i $all_mols {
-	incr k
-	set iname [molinfo $i get name]
-	$cells Item 1 $k "$iname ($i)"
 
-	for {set j 0} {$j < $jmax($i)} {incr j} {
-	  if {![info exists rms_values($i,$j)]} {continue}
-	  $cells Item [expr $j+2] $k $rms_values($i,$j)
+      set k 1
+      foreach i $target_mol {
+	incr k
+	set iname "[molinfo $i get name] ($i)"
+	$cells Item 1 $k $iname
+	for {set j 0} {$j < [llength $y($i)]} {incr j} {
+	  $cells Item [expr $j+2] 1 [lindex $x($i) $j]
+	  $cells Item [expr $j+2] $k [lindex $y($i) $j]
 	}
       }
-
+      
       set charts [$workbook Charts]
       set chart [$charts Add]
       $chart Name "RMSDTT graph"
       set endrange [int2word $k]
-      append endrange [expr $jmaxmax+2]
+      append endrange [expr [llength $y($i)]+2]
       $chart ChartWizard [$worksheet Range "A1" $endrange] -4169 [::tcom::na] 2 1 [expr $k-1] 1 "$exceltitle\n($rms_sel)"
       $chart ChartType 75
       [[$chart PlotArea] Interior] ColorIndex 0
@@ -890,27 +1069,81 @@ proc ::rmsdtt::doPlot {} {
       $yaxis HasMajorGridlines 0
       $yaxis HasTitle 1
       [$yaxis AxisTitle] Text "Rmsd (A)"
-
-#      set interface [::tcom::info interface $xaxis]
-#      set properties [$interface properties]
-#      foreach property $properties {
-#	puts "property $property"
-#      }
-#      set methods [$interface methods]
-#      foreach method $methods {
-#			       puts "method [lrange $method 0 2] \{"
-#			       set parameters [lindex $method 3]
-#			       foreach parameter $parameters {
-#				 puts "    \{$parameter\}"
-#			       }
-#			       puts "\}"
-#			     }
-      #$excel Quit
+    
+    } else {
+      showMessage "Plotting in MS Excel only availabe for Windows systems"
     }
   }
-
-
 }
+
+
+proc rmsdtt::set_sel {} {
+  variable w
+  variable bb_only
+  variable trace_only
+  variable noh
+  variable swap_sw
+  variable bb_def
+
+#  set a [$w.top.left.sel get 1.0 end]
+#  puts "a <$a>"
+  regsub -all "\#.*?\n" [$w.top.left.sel get 1.0 end] "" temp1
+  regsub -all "\n" $temp1 " " temp2
+  regsub -all " $" $temp2 "" temp3
+#  puts "c <$temp3>"
+  if { $trace_only } {
+    append rms_sel "($temp3) and name CA"
+  } elseif { $bb_only } {
+    append rms_sel "($temp3) and name $bb_def"
+  } elseif { $noh || $swap_sw} {
+    append rms_sel "($temp3) and noh"
+  } else {
+    append rms_sel $temp3
+  }
+  return $rms_sel
+}
+
+
+proc rmsdtt::get_frames_for_mol { mol } {
+  variable skip_sw
+  variable skip_ini
+  variable skip_steps
+  variable traj_sw
+
+  set list {}
+
+  if {$traj_sw} {
+    for {set n 0} {$n < [molinfo $mol get numframes]} {incr n} {
+      lappend list $n
+    }
+    
+    if {$skip_sw} {
+      set result {}
+      set s [expr $skip_steps + 1]
+      for {set i $skip_ini} {$i < [llength $list]} {incr i $s} {
+	lappend result [lindex $list $i]
+      }
+      set list $result
+    }
+  } else {
+    lappend list [molinfo $mol get frame]
+  }
+
+  return $list
+}
+
+proc rmsdtt::showMessage {mess} {
+  bell
+  toplevel .messpop 
+  grab .messpop
+  option add *Font {Helvetica -12 bold}
+  wm title .messpop "Warning"
+    message .messpop.msg -relief groove -bd 2 -text $mess -aspect 400 -justify center -padx 20 -pady 20
+  
+  button .messpop.okb -text OK -command {destroy .messpop ; return 0}
+  pack .messpop.msg .messpop.okb -side top 
+}
+
 
 proc rmsdtt::int2word {int} {
   # http://wiki.tcl.tk/10915
@@ -924,13 +1157,16 @@ proc rmsdtt::int2word {int} {
   }
   set word
 }
+
+
 proc a-z {} {list a b c d e f g h i j k l m n o p q r s t u v w x y z}
 
-proc ::rmsdtt::ctrlgui {} {
+
+proc rmsdtt::ctrlgui {} {
   variable w
-  variable frames_sw
-  variable frames_all
-  variable file_out_sw
+  variable traj_sw
+  variable traj_all
+  variable save_sw
   variable plot_sw
   variable rmsd_base
   variable time_sw
@@ -938,16 +1174,17 @@ proc ::rmsdtt::ctrlgui {} {
   variable skip_ini
   variable skip_steps
   variable swap_sw
+  variable swap_use
   variable noh
 
-  if {$frames_sw} {
-    if {$frames_all} {
+  if {$traj_sw} {
+    if {$traj_all} {
       $w.top.right.traj.file.plot config -state disable
     } else {
       $w.top.right.traj.file.plot config -state normal
     }
     $w.top.right.traj.file.0 config -state normal
-    if {$file_out_sw} {
+    if {$save_sw} {
       $w.top.right.traj.file.name config -state normal
     } else {
       $w.top.right.traj.file.name config -state disable
@@ -956,18 +1193,18 @@ proc ::rmsdtt::ctrlgui {} {
       $w.top.right.traj.frames.reflabel config -state disable
       $w.top.right.traj.frames.all config -state disable
       $w.top.right.traj.frames.ref config -state disable
-      $w.top.right.swap.0 config -state disable
-      $w.top.right.swap.type config -state disable
-      $w.top.right.swap.list config -state disable
-      $w.top.right.swap.print config -state disable
+      $w.top.left.swap.0 config -state disable
+      $w.top.left.swap.type config -state disable
+      $w.top.left.swap.list config -state disable
+      $w.top.left.swap.print config -state disable
      } else {
       $w.top.right.traj.frames.reflabel config -state normal
       $w.top.right.traj.frames.all config -state normal
-      $w.top.right.swap.0 config -state normal
-      $w.top.right.swap.type config -state normal
-      $w.top.right.swap.list config -state normal
-      $w.top.right.swap.print config -state normal
-      if {$frames_all} {
+      $w.top.left.swap.0 config -state normal
+      $w.top.left.swap.type config -state normal
+      $w.top.left.swap.list config -state normal
+      $w.top.left.swap.print config -state normal
+      if {$traj_all} {
 	$w.top.right.traj.frames.ref config -state disable
       } else {
 	$w.top.right.traj.frames.ref config -state normal
@@ -986,7 +1223,7 @@ proc ::rmsdtt::ctrlgui {} {
     $w.top.right.traj.skip.0 config -state disable
   }
 
-  if {$time_sw && $frames_sw} {
+  if {$time_sw && $traj_sw} {
     $w.top.right.traj.time.inilabel config -state normal
     $w.top.right.traj.time.inival config -state normal
     $w.top.right.traj.time.steplabel config -state normal
@@ -998,7 +1235,7 @@ proc ::rmsdtt::ctrlgui {} {
     $w.top.right.traj.time.stepval config -state disable
   }
 
-  if {$skip_sw && $frames_sw} {
+  if {$skip_sw && $traj_sw} {
     $w.top.right.traj.skip.inilabel config -state normal
     $w.top.right.traj.skip.ini config -state normal
     $w.top.right.traj.skip.stepslabel config -state normal
@@ -1010,35 +1247,25 @@ proc ::rmsdtt::ctrlgui {} {
     $w.top.right.traj.skip.steps config -state disable
   }
 
-  if {$swap_sw} {
-    set noh 1
-    $w.top.left.inner.noh config -state disable
-  } else {
-    $w.top.left.inner.noh config -state normal
+  if {$swap_use} {
+    if {$swap_sw} {
+      set noh 1
+      $w.top.left.mods.noh config -state disable
+      $w.top.left.swap.type config -state disable
+      $w.top.left.swap.print config -state disable
+      $w.top.left.swap.list config -state disable
+    } else {
+      $w.top.left.mods.noh config -state normal
+      $w.top.left.swap.type config -state normal
+      $w.top.left.swap.print config -state normal
+      $w.top.left.swap.list config -state normal
+    }
+    update_swap_types
   }
-  update_swap_types
-
 }
 
 
-proc ::rmsdtt::update_swap_types {} {
-  variable w
-  variable swap_type
-
-  $w.top.right.swap.type.menu delete 0 end
-  $w.top.right.swap.type.menu add radiobutton -value "all" -label "all" -variable ::rmsdtt::swap_type
-
-  foreach r [array names ::swap::swap_list] {
-    lappend types [lindex $::swap::swap_list($r) 0]
-  }
-  foreach t [lsort -unique $types] {
-    $w.top.right.swap.type.menu add radiobutton -value $t -label $t -variable ::rmsdtt::swap_type
-  }
-  
-}
-
-
-proc ::rmsdtt::ctrlbb { obj } {
+proc rmsdtt::ctrlbb { obj } {
   variable w
   variable bb_only
   variable trace_only
@@ -1057,464 +1284,141 @@ proc ::rmsdtt::ctrlbb { obj } {
 }
 
 
-proc ::rmsdtt::rmsdtt {} {
-  variable w ;# Tk window
-  variable bb_only 
-  variable trace_only
-  variable noh
-  variable skip_sw
-  variable skip_ini
-  variable skip_steps
-  variable swap_sw
+proc rmsdtt::update_swap_types {} {
+  variable w
   variable swap_type
-  variable swap_print
-  variable pdb_list
-  variable rms_ave 
-  variable rms_list 
-  variable rms_sel 
-  variable rmsd_base
-  variable tot_rms 
-  variable rms_disp
-  variable RMSDhistory
 
-  variable frames_sw
-  variable frames_ref
-  variable frames_all
-  variable time_sw
-  variable time_ini
-  variable time_step
-  variable file_out_sw
-  variable file_out
-  variable file_out_id
-  variable plot_sw
+  $w.top.left.swap.type.menu delete 0 end
+  $w.top.left.swap.type.menu add radiobutton -value "all" -label "all" -variable ::rmsdtt::swap_type
 
-  variable ftr_bgcol 
-  variable ftr_fgcol 
-  variable calc_bgcol
-  variable calc_fgcol
-  variable sel_bgcol
-  variable sel_fgcol
-  variable act_bgcol   
-  variable act_fgcol   
-  variable entry_bgcol 
-  variable but_abgcol  
-  variable but_bgcol   
-  variable scr_trough 
-
-  #  Set several parameters.
-  set bb_only 0
-  set trace_only 0
-  set noh 1
-  set RMSDhistory ""
-  set rmsd_base {top}
-  set tot_rms {}
-
-  set skip_sw 0
-  set skip_ini 0
-  set skip_steps 1
-
-  set swap_sw 0
-  set swap_type "all"
-  set swap_print 1
-
-  set frames_sw 1
-  set frames_ref 0
-  set frames_all 0
-  set time_sw 0
-  set time_ini 0.0
-  set time_step 1.0
-  set file_out_sw 0
-  set file_out "trajrmsd.dat"
-  set plot_sw 1
-
-  # If already initialized, just turn on
-  if { [winfo exists .rmsdtt] } {
-    wm deiconify $w
-    return
+  foreach r [array names ::swap::swap_list] {
+    lappend types [lindex $::swap::swap_list($r) 0]
   }
-
-  # Create the window for the RMSD calculations.
-  set w [toplevel ".rmsdtt" -bg $calc_bgcol]
-  wm title $w "RMSD Trajectory Tool"
-  wm resizable $w 0 0
-
-  # Create the top part with selection windows and 
-  # the "Calculate" button
-
-  # Selection part.
-  set calc_top [frame $w.top -bg $calc_bgcol]
-
-  frame $calc_top.left -relief ridge -bd 4 -bg $calc_bgcol
-  set rc_win [frame $calc_top.left.inner -bg $calc_bgcol -bd 0]
-  frame $rc_win.selfr -relief sunken -bd 4 -bg $calc_bgcol
-
-  text $rc_win.selfr.sel -bd 0 -highlightthickness 0 -insertofftime 0 \
-    -bg $entry_bgcol -selectbackground $sel_bgcol -selectforeground $sel_fgcol \
-    -selectborderwidth 0 -exportselection yes -height 5 -width 25 -wrap word
-   $rc_win.selfr.sel insert end {segname LIG}
-
-  checkbutton $rc_win.bb -highlightthickness 0 \
-    -activebackground $calc_bgcol -bg $calc_bgcol \
-    -fg $calc_fgcol -activeforeground $calc_fgcol \
-    -text {Backbone} -variable [namespace current]::bb_only \
-    -command {::rmsdtt::ctrlbb bb}
-
-  checkbutton $rc_win.tr -highlightthickness 0 \
-    -activebackground $calc_bgcol -bg $calc_bgcol \
-    -fg $calc_fgcol -activeforeground $calc_fgcol \
-    -text {Trace} -variable [namespace current]::trace_only \
-   -command {::rmsdtt::ctrlbb trace}
-
-  checkbutton $rc_win.noh -highlightthickness 0 \
-    -activebackground $calc_bgcol -bg $calc_bgcol \
-    -fg $calc_fgcol -activeforeground $calc_fgcol \
-    -text {noh} -variable [namespace current]::noh \
-   -command {::rmsdtt::ctrlbb noh}
-
-  menubutton  $rc_win.selectionhistory \
-        -menu $rc_win.selectionhistory.m -padx 5 -pady 4 \
-        -text {History} -relief raised \
-        -direction flush
-
-
-   menu $rc_win.selectionhistory.m
-
-  # Button part.
-  frame $calc_top.right -bg $calc_bgcol
-  frame $calc_top.right.pushfr -relief ridge -bd 4 -bg $calc_bgcol
-
-  button $calc_top.right.rmsd -relief raised -bd 4 -highlightthickness 0 -text {RMSD} \
-    -activebackground $but_abgcol -bg $but_bgcol \
-    -fg $calc_fgcol -activeforeground $calc_fgcol \
-    -command {::rmsdtt::doRmsd}
-
-  
-   button $calc_top.right.align -relief raised -bd 4 -highlightthickness 0 -text {Align} \
-    -activebackground $act_bgcol -bg $but_bgcol \
-    -activeforeground $act_fgcol -fg $ftr_fgcol  \
-    -command {::rmsdtt::doAlign}
-  
-  frame $calc_top.right.switch -bg $calc_bgcol -relief ridge -bd 4
-
-  radiobutton $calc_top.right.switch.0 -highlightthickness 0 \
-    -activebackground $calc_bgcol -bg $calc_bgcol \
-    -fg $calc_fgcol -activeforeground $calc_fgcol \
-    -text {Top} -variable [namespace current]::rmsd_base -value "top" \
-    -command ::rmsdtt::ctrlgui
-
-  radiobutton $calc_top.right.switch.1 -highlightthickness 0 \
-    -activebackground $calc_bgcol -bg $calc_bgcol \
-    -fg $calc_fgcol -activeforeground $calc_fgcol \
-    -text {Average} -variable [namespace current]::rmsd_base -value "ave" \
-    -command ::rmsdtt::ctrlgui
-
-  radiobutton $calc_top.right.switch.2 -highlightthickness 0 \
-    -activebackground $calc_bgcol -bg $calc_bgcol \
-    -fg $calc_fgcol -activeforeground $calc_fgcol \
-    -text {Selected} -variable [namespace current]::rmsd_base -value "selected" \
-    -command ::rmsdtt::ctrlgui
-
-  frame $calc_top.right.swap -bg $calc_bgcol -relief ridge -bd 4
-
-  checkbutton $calc_top.right.swap.0 -highlightthickness 0 \
-    -activebackground $calc_bgcol -bg $calc_bgcol \
-    -fg $calc_fgcol -activeforeground $calc_fgcol \
-    -text "Swap_atoms:" -variable [namespace current]::swap_sw \
-    -command ::rmsdtt::ctrlgui
-
-  menubutton $calc_top.right.swap.type -relief raised -bd 1 -direction flush -textvariable [namespace current]::swap_type -menu $calc_top.right.swap.type.menu
-  menu $calc_top.right.swap.type.menu
-
-  checkbutton $calc_top.right.swap.print -highlightthickness 0 \
-    -activebackground $calc_bgcol -bg $calc_bgcol \
-    -fg $calc_fgcol -activeforeground $calc_fgcol \
-    -text "print:" -variable [namespace current]::swap_print
-
-  button $calc_top.right.swap.list -relief raised -bd 2 -highlightthickness 0 -text "List" \
-    -activebackground $but_abgcol -bg $but_bgcol \
-    -fg $calc_fgcol -activeforeground $calc_fgcol \
-    -command [namespace code {::swap::list $swap_type}]
-
-  # Trajectory part.
-  frame $calc_top.right.traj -bg $calc_bgcol -relief ridge -bd 4
-
-  frame $calc_top.right.traj.frames -bg $calc_bgcol -relief ridge -bd 0
-
-  checkbutton $calc_top.right.traj.frames.0 -highlightthickness 0 \
-    -activebackground $calc_bgcol -bg $calc_bgcol \
-    -fg $calc_fgcol -activeforeground $calc_fgcol \
-    -text "Trajectory" -variable [namespace current]::frames_sw \
-    -command ::rmsdtt::ctrlgui
-
-  label $calc_top.right.traj.frames.reflabel -text "Frame ref:" \
-    -bg $calc_bgcol -fg $calc_fgcol \
-    -padx 3 -pady 3
-
-  entry $calc_top.right.traj.frames.ref -bd 0 -highlightthickness 0 -insertofftime 0 \
-    -bg $entry_bgcol -selectbackground $sel_bgcol -selectforeground $sel_fgcol \
-    -selectborderwidth 0 -exportselection yes -width 5 \
-    -textvariable [namespace current]::frames_ref
-
-  checkbutton $calc_top.right.traj.frames.all -highlightthickness 0 \
-    -activebackground $calc_bgcol -bg $calc_bgcol \
-    -fg $calc_fgcol -activeforeground $calc_fgcol \
-    -text "All" -variable [namespace current]::frames_all \
-    -command ::rmsdtt::ctrlgui
-  
-  frame $calc_top.right.traj.skip  -bg $calc_bgcol -relief ridge -bd 0
-  
-  checkbutton $calc_top.right.traj.skip.0 -highlightthickness 0 \
-    -activebackground $calc_bgcol -bg $calc_bgcol \
-    -fg $calc_fgcol -activeforeground $calc_fgcol \
-    -text "Skip" -variable [namespace current]::skip_sw \
-    -command ::rmsdtt::ctrlgui
-
-  label $calc_top.right.traj.skip.inilabel -text "Ini:" \
-    -bg $calc_bgcol -fg $calc_fgcol \
-    -padx 3 -pady 3
-
-  entry $calc_top.right.traj.skip.ini -bd 0 -highlightthickness 0 -insertofftime 0 \
-    -bg $entry_bgcol -selectbackground $sel_bgcol -selectforeground $sel_fgcol \
-    -selectborderwidth 0 -exportselection yes -width 3 \
-    -textvariable [namespace current]::skip_ini
-
-  label $calc_top.right.traj.skip.stepslabel -text "Steps:" \
-    -bg $calc_bgcol -fg $calc_fgcol \
-    -padx 3 -pady 3
-
-  entry $calc_top.right.traj.skip.steps -bd 0 -highlightthickness 0 -insertofftime 0 \
-    -bg $entry_bgcol -selectbackground $sel_bgcol -selectforeground $sel_fgcol \
-    -selectborderwidth 0 -exportselection yes -width 3 \
-    -textvariable [namespace current]::skip_steps
-
-  frame $calc_top.right.traj.time -bg $calc_bgcol -relief ridge -bd 0
-
-  checkbutton $calc_top.right.traj.time.0 -highlightthickness 0 \
-    -activebackground $calc_bgcol -bg $calc_bgcol \
-    -fg $calc_fgcol -activeforeground $calc_fgcol \
-    -text "Time (ps)" -variable [namespace current]::time_sw \
-    -command ::rmsdtt::ctrlgui
-
-  label $calc_top.right.traj.time.inilabel -text "Ini:" \
-    -bg $calc_bgcol -fg $calc_fgcol \
-    -padx 3 -pady 3
-
-  entry $calc_top.right.traj.time.inival -bd 0 -highlightthickness 0 -insertofftime 0 \
-    -bg $entry_bgcol -selectbackground $sel_bgcol -selectforeground $sel_fgcol \
-    -selectborderwidth 0 -exportselection yes -width 6 \
-    -textvariable [namespace current]::time_ini
-
-  label $calc_top.right.traj.time.steplabel -text "Step:" \
-    -bg $calc_bgcol -fg $calc_fgcol \
-    -padx 3 -pady 3
-
-  entry $calc_top.right.traj.time.stepval -bd 0 -highlightthickness 0 -insertofftime 0 \
-    -bg $entry_bgcol -selectbackground $sel_bgcol -selectforeground $sel_fgcol \
-    -selectborderwidth 0 -exportselection yes -width 6 \
-    -textvariable [namespace current]::time_step
-
-  frame $calc_top.right.traj.file -bg $calc_bgcol -relief ridge -bd 0
-
-  checkbutton $calc_top.right.traj.file.plot -highlightthickness 0 \
-    -activebackground $calc_bgcol -bg $calc_bgcol \
-    -fg $calc_fgcol -activeforeground $calc_fgcol \
-    -text "Plot" -variable [namespace current]::plot_sw
-
-  checkbutton $calc_top.right.traj.file.0 -highlightthickness 0 \
-    -activebackground $calc_bgcol -bg $calc_bgcol \
-    -fg $calc_fgcol -activeforeground $calc_fgcol \
-    -text "Save to file:" -variable [namespace current]::file_out_sw \
-    -command [namespace code {
-      if {$file_out_sw} {
-	$w.top.right.traj.file.name config -state normal
-      } else {
-	$w.top.right.traj.file.name config -state disable
-      }
-    }]
-
-  entry $calc_top.right.traj.file.name -bd 0 -highlightthickness 0 -insertofftime 0 \
-    -bg $entry_bgcol -selectbackground $sel_bgcol -selectforeground $sel_fgcol \
-    -selectborderwidth 0 -exportselection yes -width 15 \
-    -textvariable [namespace current]::file_out -state disable
-
-  # Pack the top part widgets.
-  pack $calc_top -side top -fill both -expand 1 
-
-  ### ...selection...
-  pack $calc_top.left -side left -fill both -expand 1
-  pack $rc_win -side left -fill both -expand 1
-  pack $rc_win.selfr -side top -fill both -expand 1 -padx 4 -pady 4
-  pack $rc_win.bb -side left 
-  pack $rc_win.tr -side left 
-  pack $rc_win.noh -side left 
-  pack $rc_win.selectionhistory -side right
-  pack $rc_win.selfr.sel -side top -fill both -expand 1
-  pack $rc_win.selfr.sel -side top -fill both -expand 1
-  
-  ### ...button...
-  pack $calc_top.right -side left -fill both
-  pack $calc_top.right.pushfr -side top -fill x -expand 1
-  pack $calc_top.right.rmsd $calc_top.right.align -side left -fill x -expand 1 -in $calc_top.right.pushfr
-  pack $calc_top.right.switch -side top -fill both
-  #pack $calc_top.right.switch.from $calc_top.right.switch.frame -side top -fill both
-  #pack $calc_top.right.switch.frame -side top -fill both
-  pack $calc_top.right.switch.0 $calc_top.right.switch.1 $calc_top.right.switch.2\
-    -side left -fill both -padx 2 -pady 2
-  
-  ### ...swap...
-  pack $calc_top.right.swap -side top -fill both
-  pack $calc_top.right.swap.0 $calc_top.right.swap.type $calc_top.right.swap.print $calc_top.right.swap.list -side left -fill both
-
-  ### ...trajectory...
-  pack $calc_top.right.traj -side top -fill both
-  pack $calc_top.right.traj.frames -side top -fill both
-  pack $calc_top.right.traj.frames.0 $calc_top.right.traj.frames.reflabel $calc_top.right.traj.frames.ref $calc_top.right.traj.frames.all\
-    -side left -fill both -padx 2 -pady 2
-  pack $calc_top.right.traj.skip -side top -fill both
-  pack $calc_top.right.traj.skip.0 $calc_top.right.traj.skip.inilabel $calc_top.right.traj.skip.ini\
-    $calc_top.right.traj.skip.stepslabel $calc_top.right.traj.skip.steps\
-    -side left -fill both -padx 2 -pady 2
-  pack $calc_top.right.traj.time -side top -fill both
-  pack $calc_top.right.traj.time.0 $calc_top.right.traj.time.inilabel $calc_top.right.traj.time.inival\
-    $calc_top.right.traj.time.steplabel $calc_top.right.traj.time.stepval\
-    -side left -fill both -padx 2 -pady 2
-  pack $calc_top.right.traj.file -side top -fill both
-  pack $calc_top.right.traj.file.plot $calc_top.right.traj.file.0 $calc_top.right.traj.file.name\
-    -side left -fill both -padx 2 -pady 2
-
-
-  # Create the bottom part, displaying the RMSDs of
-  # all the molecules from the average structure.
-  set calc_mid [frame $w.middle -relief ridge -bd 4 -bg $calc_bgcol]
-
-frame $calc_mid.titlebar -bg $calc_bgcol -relief raised -bd 2
-frame $calc_mid.titlebar.left -bg $calc_bgcol
-
-grid rowconfigure    $calc_mid.titlebar	0 -pad 0  -weight 100
-grid columnconfigure $calc_mid.titlebar 0 -pad 0  -weight 100
-grid $calc_mid.titlebar.left -in $calc_mid.titlebar -column 0 -row 0 -columnspan 1 -rowspan 1 -ipadx 0 -ipady 0 -padx 0 -pady 0 -sticky nesw
-
-frame $calc_mid.titlebar.right -bg $calc_bgcol
-grid rowconfigure    $calc_mid.titlebar 0	 -pad 0  -weight 100
-grid columnconfigure $calc_mid.titlebar 1  -pad 0  -weight 100
-grid $calc_mid.titlebar.right -in $calc_mid.titlebar -column 1 -row 0 -columnspan 1 -rowspan 1 -ipadx 0 -ipady 0 -padx 0 -pady 0 -sticky nesw
-
- label $calc_mid.titlebar.left.label -text {ID   Molecule}  \
-    -bg $calc_bgcol -fg $calc_fgcol \
-    -padx 3 -pady 3
-    
-    label $calc_mid.titlebar.right.label -text {RMSD Average:} \
-    -bg $calc_bgcol -fg $calc_fgcol \
-    -padx 3 -pady 3
-    
-  set rms_disp [frame $w.middle.body -bg $calc_bgcol]
-  frame $rms_disp.left -bg $calc_bgcol -bd 0
-  frame $rms_disp.right -bg $calc_bgcol -bd 0
-
-  set pdb_list [listbox $rms_disp.pdb_names -relief raised -bd 2 -height 10 \
-      -bg $calc_bgcol -fg $calc_fgcol \
-      -highlightthickness 0 -highlightbackground $calc_bgcol \
-      -yscrollcommand [namespace code {$rms_disp.scrbar set}] \
-			]
-
-  set rms_list [listbox $rms_disp.rms_values -relief raised -bd 2 -height 10 \
-      -bg $calc_bgcol -fg $calc_fgcol  \
-      -highlightthickness 0 -highlightbackground $calc_bgcol \
-      -yscrollcommand [namespace code {$rms_disp.scrbar set}] \
-			]
-
-  set all_mols [molactive]
-  foreach i $all_mols {
-    $pdb_list insert end [format "%-4s%-10s" [molinfo index $i] [molinfo $i get name]]
-    set rms_ave($i) {}
-    $rms_list insert end $rms_ave($i)
+  foreach t [lsort -unique $types] {
+    $w.top.left.swap.type.menu add radiobutton -value $t -label $t -variable ::rmsdtt::swap_type
   }
-
-  set rmstot_lbl [label $rms_disp.rmstot_lbl -text {Overall Average RMSD:} -anchor w -pady 3 \
-      -bg $calc_bgcol -relief raised -bd 2 -fg $calc_fgcol]
-  set rmstot_val [label $rms_disp.rmstot_val -textvariable [namespace current]::tot_rms -anchor w -pady 3 \
-      -bg $calc_bgcol -relief raised -bd 2 -fg $calc_fgcol]
-
-
-  scrollbar $rms_disp.scrbar \
-    -relief raised -activerelief raised -bd 2 -elementborderwidth 2 \
-    -bg $calc_bgcol -troughcolor $scr_trough -highlightthickness 0 \
-    -activebackground $but_abgcol \
-    -orient vert \
-    -command  {rmsdtt::two_scroll}
-   
-
-  # Pack the bottom part widgets.
-  pack $calc_mid.titlebar.left.label  -side left -in  $calc_mid.titlebar.left
-  pack $calc_mid.titlebar.right.label -side left -in  $calc_mid.titlebar.right
   
-  pack $calc_mid.titlebar -side top -fill x -in  $calc_mid
-  pack $calc_mid -side top -fill both -expand 1
-  pack $rms_disp -side top -expand 1 -fill both
-  pack $rms_disp.left $rms_disp.right -side left -fill both -expand 1
-  pack $rms_disp.scrbar -side left -fill y
-  pack $pdb_list -side top -fill both -expand 1 -in $rms_disp.left
-  pack $rmstot_lbl -side top -fill x -in $rms_disp.left
-
-  pack $rms_list -side top -fill both -expand 1 -in $rms_disp.right
-  pack $rmstot_val -side bottom -fill x -in $rms_disp.right
-
-  frame $w.bottom -bg white -height 100
-  button $w.bottom.erase -relief raised -bd 4 -highlightthickness 0 -text {Erase from list} \
-    -command [namespace code {
-    	set indexnum [$pdb_list index active] 
-    	$pdb_list delete active 
-    	$rms_list delete $indexnum 
-    	}] \
-    -activebackground $but_abgcol -bg $but_bgcol 
-   
-  button $w.bottom.allinmem -relief raised -bd 4 -highlightthickness 0 -text {All in memory} \
-    -activebackground $but_abgcol -bg $but_bgcol \
-    -command [namespace code {
-        $pdb_list delete 0 end
-        for {set i 0} {$i<[molinfo num]} {incr i} {
-          set molid [molinfo index $i]
-          $pdb_list insert end [format "%-4s%-10s" [molinfo index $i] [molinfo $molid get name]]      
-        }
-      } ]
-
-  button $w.bottom.onlyactive -relief raised -bd 4 -highlightthickness 0 -text {Only active} \
-    -activebackground $but_abgcol -bg $but_bgcol \
-    -command {rmsdtt::onlyactive}
-
-  menubutton $w.bottom.assemblymenu \
-        -menu $w.bottom.assemblymenu.m -padx 5 -pady 4 \
-        -text {Assembly} -relief raised 
-    
-  pack $w.bottom.erase $w.bottom.allinmem $w.bottom.onlyactive $w.bottom.assemblymenu -in $w.bottom  -side left -fill x -expand 1
-  pack $w.bottom -in $w -side bottom -fill x -expand 1    
-
-
-  menu $w.bottom.assemblymenu.m -postcommand [namespace code {
-      set menu $w.bottom.assemblymenu.m
-      $menu delete 0 end
-      if {[array exist assembly]} {
-        set nameofassemblies [array names assembly]
-        for {set i 0} {$i<[llength $nameofassemblies]} {incr i} {
-          set nameofcurrentassembly [lindex $nameofassemblies $i]
-
-          $menu add  radiobutton -label $nameofcurrentassembly -variable [namespace current]::selectedassembly -value $nameofcurrentassembly \
-            -command [namespace code {
-                $pdb_list delete 0 end
-                $rms_list delete 0 end
-          
-                foreach pdb $assembly($selectedassembly) {
-                  $pdb_list insert end $pdb
-                }
-              }] 
-        }
-      }
-    } ]
-
-
-# update the History menu
-  ListHisotryPullDownMenu
-  update_swap_types
-  ctrlgui
 }
 
+
+proc rmsdtt::scroll_data args {
+  variable datalist
+  foreach key [array names datalist] {
+    eval "$datalist($key) yview $args"
+  }
+}
+
+
+proc rmsdtt::mol_del { {selected 0} } {
+  variable datalist
+
+  if {$selected} {
+    set index [$datalist(mol) index active]
+    foreach key [array names datalist] {
+      $datalist($key) delete $index
+    }
+    rmsdtt::color_data
+  } else {
+    foreach key [array names datalist] {
+      $datalist($key) delete 0 end
+    }
+  }
+}
+
+
+proc rmsdtt::mol_add { {active 0} } {
+  variable datalist
+
+  foreach key [array names datalist] {
+    $datalist($key) delete 0 end
+  }
+  for {set i 0} {$i < [molinfo num]} {incr i} {
+    set molid [molinfo index $i]
+    if {$active && ![molinfo $molid get active]} {
+      continue
+    }      
+    foreach key [list avg sd min max num] {
+      $datalist($key) insert end ""
+    }
+    $datalist(id) insert end [format "%2s" [molinfo index $i]]
+    $datalist(mol) insert end [format "%s" [molinfo $i get name]]
+  }
+  rmsdtt::color_data
+}
+
+
+proc rmsdtt::color_data {} {
+  variable datalist
+
+  set color "grey85"
+  for {set i 0} {$i < [$datalist(id) size]} {incr i} {
+    foreach key [array names datalist] {
+      $datalist($key) itemconfigure $i -background $color
+    }
+    if {$color == "grey85"} {
+      set color "grey80"
+    } else {
+      set color "grey85"
+    }
+  }
+}
+
+
+
+proc rmsdtt::ListHisotryPullDownMenu {} {
+  variable w
+  variable bb_only
+  variable trace_only
+  variable noh
+
+  regsub -all "\#.*?\n" [$w.top.left.sel get 1.0 end] "" temp1
+  regsub -all "\n" $temp1 " " temp2
+  regsub -all " $" $temp2 "" sel
+  if { $trace_only } {
+    append sel { [sw: trace]}
+  } elseif { $bb_only } {
+    append sel { [sw: bb]}
+  } elseif { $noh } {
+    append sel { [sw: noh]}
+  }
+
+  $w.top.left.mods.selectionhistory.m add command -label $sel \
+    -command [list rmsdtt::chooseHistoryItem $sel]
+
+}
+
+
+proc rmsdtt::chooseHistoryItem {sel} {
+  variable w
+  variable bb_only
+  variable trace_only
+  variable noh
+
+  regexp {(.*)\s+\[sw:\s+(.*)\]} $sel foo sel_text mod
+  $w.top.left.sel delete 1.0 end
+  $w.top.left.sel insert end $sel_text
+  
+  switch $mod {
+    trace {
+      set trace_only 1
+    }
+    bb {
+      set bb_only 1
+    }
+    noh {
+      set noh 1
+    }
+  }
+  ctrlbb $mod
+}
+
+
+proc rmsdtt::help_about { {parent .rmsdtt} } {
+  set vn [package present rmsdtt]
+  tk_messageBox -title "About RMSDTT v$vn" -parent $parent -message \
+    "RMSDTT v$vn plugin for VMD
+
+Copyright (C) Luis Gracia <lug2002@med.cornell.edu> 
+
+"
+}
