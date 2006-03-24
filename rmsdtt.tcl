@@ -32,7 +32,6 @@ package provide rmsdtt 2.0
 
 namespace eval ::rmsdtt:: {
   namespace export rmsdtt
-  option add *Font {Helvetica -12}
 }
 
 
@@ -73,6 +72,7 @@ proc rmsdtt::rmsdtt {} {
   variable save_file  "trajrmsd.dat"
   variable plot_sw    0
   variable plot_program "multiplot"
+  variable colorize   1
   variable bb_def     "C CA N"
   variable stats      1
   variable datalist
@@ -84,28 +84,37 @@ proc rmsdtt::rmsdtt {} {
     return
   }
 
+  # GUI look
+  #option add *rmsdtt.*font {Helvetica 9}
+  #option add *rmsdtt.top.left.sel.background white
+  #option add *rmsdtt.*Text.background white
+  option add *rmsdtt.*borderWidth 1
+  option add *rmsdtt.*Button.padY 0
+  option add *rmsdtt.*Menubutton.padY 0
+
   # Main window
   set w [toplevel ".rmsdtt"]
   wm title $w "RMSD Trajectory Tool"
-  wm resizable $w 0 0
 
   # Menu
   frame $w.menubar -relief raised -bd 2
-  pack $w.menubar -padx 1 -fill x
+  pack $w.menubar -fill x
 
-  menubutton $w.menubar.file -text "File" -underline 0 -menu $w.menubar.file.menu
+  menubutton $w.menubar.file -text "File" -menu $w.menubar.file.menu -underline 0 -pady 2
   menu $w.menubar.file.menu -tearoff no
-  $w.menubar.file.menu add command -label "Save..." -command "[namespace current]::SaveDataBrowse" -underline 0
-  $w.menubar.file.menu add command -label "Plot" -command "[namespace current]::doPlot" -underline 0
+  $w.menubar.file.menu add command -label "Save data..." -command "[namespace current]::SaveDataBrowse data" -underline 0
+  $w.menubar.file.menu add command -label "Save summary..." -command "[namespace current]::SaveDataBrowse summary" -underline 0
+  $w.menubar.file.menu add command -label "Plot data" -command [namespace current]::doPlot -underline 0
   pack $w.menubar.file -side left
 
-  menubutton $w.menubar.options -text "Options" -underline 0 -menu $w.menubar.options.menu
+  menubutton $w.menubar.options -text "Options" -menu $w.menubar.options.menu -underline 0 -pady 2
   menu $w.menubar.options.menu -tearoff no
   $w.menubar.options.menu add cascade -label "Plotting program..." -menu $w.menubar.options.menu.plot -underline 0
-  menu $w.menubar.options.menu.plot
+  menu $w.menubar.options.menu.plot -tearoff no
   $w.menubar.options.menu.plot add radiobutton -label "Multiplot (all)" -variable [namespace current]::plot_program -value "multiplot" -underline 0
   $w.menubar.options.menu.plot add radiobutton -label "Xmgrace (Unix)" -variable [namespace current]::plot_program -value "xmgrace" -underline 0
   $w.menubar.options.menu.plot add radiobutton -label "MS Excel (Windows)" -variable [namespace current]::plot_program -value "excel" -underline 4
+  $w.menubar.options.menu add checkbutton -label "Colorize table" -variable [namespace current]::colorize -underline 0
   $w.menubar.options.menu add cascade -label "Backbone def..." -menu $w.menubar.options.menu.bbdef -underline 0
   menu $w.menubar.options.menu.bbdef
   $w.menubar.options.menu.bbdef add radiobutton -label "C CA N" -variable [namespace current]::bb_def -value "C CA N"
@@ -113,144 +122,134 @@ proc rmsdtt::rmsdtt {} {
   $w.menubar.options.menu add checkbutton -label "Statistics" -variable [namespace current]::stats -underline 0
   pack $w.menubar.options -side left
 
-  menubutton $w.menubar.help -text "Help" -underline 0 -menu $w.menubar.help.menu
+  menubutton $w.menubar.help -text "Help" -menu $w.menubar.help.menu -underline 0 -pady 2 
   menu $w.menubar.help.menu -tearoff no
   $w.menubar.help.menu add command -label "About" -command [namespace current]::help_about
   $w.menubar.help.menu add command -label "Help..." -command "vmd_open_url http://physiology.med.cornell.edu/faculty/hweinstein/vmdplugins/rmsdtt/index.html"
   pack $w.menubar.help -side right
-
-  # Selection
+  
+  # top frame
   frame $w.top
-  pack $w.top -side top -fill both
-
-  frame $w.top.left -relief ridge -bd 2
-  pack $w.top.left -side left -fill both
-
-  text $w.top.left.sel -bd 0 -highlightthickness 0 -selectborderwidth 0 -exportselection yes -height 5 -width 25 -wrap word -relief sunken -bd 2
-  pack $w.top.left.sel -side top -fill both -expand 1
+  pack $w.top -side top -fill x
+  
+  # Selection
+  frame $w.top.left -relief ridge
+  pack $w.top.left -side left -fill both -expand yes
+  
+  text $w.top.left.sel -height 5 -width 25 -highlightthickness 0 -selectborderwidth 0 -exportselection yes -wrap word -relief sunken -bd 1
+  pack $w.top.left.sel -side top -fill both -expand yes
   $w.top.left.sel insert end "protein"
 
   frame $w.top.left.mods -relief ridge -bd 2
-  pack $w.top.left.mods -side top
-  checkbutton $w.top.left.mods.bb -text "Backbone" -variable [namespace current]::bb_only -command {::rmsdtt::ctrlbb bb}
-  checkbutton $w.top.left.mods.tr -text "Trace" -variable [namespace current]::trace_only -command {::rmsdtt::ctrlbb trace}
-  checkbutton $w.top.left.mods.noh -text "noh" -variable [namespace current]::noh -command {::rmsdtt::ctrlbb noh}
+  pack $w.top.left.mods -side top -fill x
+  checkbutton $w.top.left.mods.bb -text "Backbone" -variable [namespace current]::bb_only -command "[namespace current]::ctrlbb bb"
+  checkbutton $w.top.left.mods.tr -text "Trace" -variable [namespace current]::trace_only -command "[namespace current]::ctrlbb trace"
+  checkbutton $w.top.left.mods.noh -text "noh" -variable [namespace current]::noh -command "[namespace current]::ctrlbb noh"
+  menubutton  $w.top.left.mods.selectionhistory -menu $w.top.left.mods.selectionhistory.m -text "History" -relief raised -direction flush
+  menu $w.top.left.mods.selectionhistory.m -tearoff no
   pack $w.top.left.mods.bb $w.top.left.mods.tr $w.top.left.mods.noh -side left -anchor nw
-
-  menubutton  $w.top.left.mods.selectionhistory -menu $w.top.left.mods.selectionhistory.m -padx 5 -pady 4 -text "History" -relief raised -direction flush
-  menu $w.top.left.mods.selectionhistory.m
   pack $w.top.left.mods.selectionhistory -side right
 
   # Swap
   if {[catch {package require swap} msg]} {
     set swap_use 0
   }
-  puts $swap_use
   if {$swap_use} {
     frame $w.top.left.swap -relief ridge -bd 2
     pack $w.top.left.swap -side top -fill x
     
-    checkbutton $w.top.left.swap.0 -text "Swap_atoms:" -variable [namespace current]::swap_sw -command ::rmsdtt::ctrlgui
-    menubutton $w.top.left.swap.type -relief raised -bd 1 -direction flush -textvariable [namespace current]::swap_type -menu $w.top.left.swap.type.menu
-    menu $w.top.left.swap.type.menu
-    checkbutton $w.top.left.swap.print -text "print:" -variable [namespace current]::swap_print
-    button $w.top.left.swap.list -relief raised -bd 2 -text "List" -command [namespace code {::swap::list $swap_type}]
-    pack $w.top.left.swap.0 $w.top.left.swap.type $w.top.left.swap.print $w.top.left.swap.list -side left
+    checkbutton $w.top.left.swap.0 -text "Swap_atoms:" -variable [namespace current]::swap_sw -command [namespace current]::ctrlgui
+    menubutton $w.top.left.swap.type -relief raised -direction flush -textvariable [namespace current]::swap_type -menu $w.top.left.swap.type.menu
+    menu $w.top.left.swap.type.menu -tearoff no
+    checkbutton $w.top.left.swap.print -text "verbose" -variable [namespace current]::swap_print
+    button $w.top.left.swap.list -relief raised -text "List" -command [namespace code {::swap::list $swap_type}]
+    pack $w.top.left.swap.0 $w.top.left.swap.type $w.top.left.swap.print -side left -anchor nw
+    pack $w.top.left.swap.list -side right
   }
   
   # Buttons
   frame $w.top.right
-  pack $w.top.right -side left -fill x
+  pack $w.top.right -side right
 
   frame $w.top.right.pushfr -relief ridge -bd 2
-  pack $w.top.right.pushfr -side top -fill x -expand 1
+  pack $w.top.right.pushfr -side top -fill x
 
-  button $w.top.right.rmsd -relief raised -bd 2 -text "RMSD" -command {::rmsdtt::doRmsd}
-  button $w.top.right.align -relief raised -bd 2 -text "Align" -command {::rmsdtt::doAlign}
-  pack $w.top.right.rmsd $w.top.right.align -side left -fill x -expand 1 -in $w.top.right.pushfr
+  button $w.top.right.pushfr.rmsd -text "RMSD" -relief raised -command [namespace current]::doRmsd
+  button $w.top.right.pushfr.align -text "Align" -relief raised -command [namespace current]::doAlign
+  pack $w.top.right.pushfr.rmsd $w.top.right.pushfr.align -side left -fill x -expand yes
   
-  frame $w.top.right.switch -relief ridge -bd 2
-  pack $w.top.right.switch -side top -fill x
+  # Ref mol
+  frame $w.top.right.ref -relief ridge -bd 2
+  pack $w.top.right.ref -side top -fill x
 
-  radiobutton $w.top.right.switch.0 -text "Top" -variable [namespace current]::rmsd_base -value "top" -command ::rmsdtt::ctrlgui
-  radiobutton $w.top.right.switch.1 -text "Average" -variable [namespace current]::rmsd_base -value "ave" -command ::rmsdtt::ctrlgui
-  radiobutton $w.top.right.switch.2 -text "Selected" -variable [namespace current]::rmsd_base -value "selected" -command ::rmsdtt::ctrlgui
-  pack $w.top.right.switch.0 $w.top.right.switch.1 $w.top.right.switch.2 -side left -fill x -padx 2 -pady 2
+  radiobutton $w.top.right.ref.0 -text "Top" -variable [namespace current]::rmsd_base -value "top" -command [namespace current]::ctrlgui
+  radiobutton $w.top.right.ref.1 -text "Average" -variable [namespace current]::rmsd_base -value "ave" -command [namespace current]::ctrlgui
+  radiobutton $w.top.right.ref.2 -text "Selected" -variable [namespace current]::rmsd_base -value "selected" -command [namespace current]::ctrlgui
+  pack $w.top.right.ref.0 $w.top.right.ref.1 $w.top.right.ref.2 -side left -expand yes
 
   # Trajectory
   frame $w.top.right.traj -relief ridge -bd 2
-  pack $w.top.right.traj -side top -fill x
+  pack $w.top.right.traj -side top
 
   frame $w.top.right.traj.frames -relief ridge -bd 0
   pack $w.top.right.traj.frames -side top -fill x
 
-  checkbutton $w.top.right.traj.frames.0 -text "Trajectory" -variable [namespace current]::traj_sw -command ::rmsdtt::ctrlgui
-  label $w.top.right.traj.frames.reflabel -text "Frame ref:" -padx 3 -pady 3
-  entry $w.top.right.traj.frames.ref -bd 0 -selectborderwidth 0 -exportselection yes -width 5 -textvariable [namespace current]::traj_ref
-  checkbutton $w.top.right.traj.frames.all -text "All" -variable [namespace current]::traj_all -command ::rmsdtt::ctrlgui
-  pack $w.top.right.traj.frames.0 $w.top.right.traj.frames.reflabel $w.top.right.traj.frames.ref $w.top.right.traj.frames.all\
-    -side left -fill x -padx 2 -pady 2
+  checkbutton $w.top.right.traj.frames.0 -text "Trajectory" -variable [namespace current]::traj_sw -command [namespace current]::ctrlgui
+  label $w.top.right.traj.frames.reflabel -text "Frame ref:"
+  entry $w.top.right.traj.frames.ref -width 5 -textvariable [namespace current]::traj_ref
+  checkbutton $w.top.right.traj.frames.all -text "All" -variable [namespace current]::traj_all -command [namespace current]::ctrlgui
+  pack $w.top.right.traj.frames.0 $w.top.right.traj.frames.reflabel $w.top.right.traj.frames.ref -side left -anchor nw -fill x
+  pack $w.top.right.traj.frames.all -side right
   
   frame $w.top.right.traj.skip -relief ridge -bd 0
   pack $w.top.right.traj.skip -side top -fill x
 
-  checkbutton $w.top.right.traj.skip.0 -text "Skip" -variable [namespace current]::skip_sw -command ::rmsdtt::ctrlgui
-  label $w.top.right.traj.skip.inilabel -text "Ini:" -padx 3 -pady 3
-  entry $w.top.right.traj.skip.ini -bd 0 -selectborderwidth 0 -exportselection yes -width 3 -textvariable [namespace current]::skip_ini
-  label $w.top.right.traj.skip.stepslabel -text "Steps:" -padx 3 -pady 3
-  entry $w.top.right.traj.skip.steps -bd 0 -selectborderwidth 0 -exportselection yes -width 3 -textvariable [namespace current]::skip_steps
-  pack $w.top.right.traj.skip.0 $w.top.right.traj.skip.inilabel $w.top.right.traj.skip.ini\
-    $w.top.right.traj.skip.stepslabel $w.top.right.traj.skip.steps\
-    -side left -fill x -padx 2 -pady 2
+  checkbutton $w.top.right.traj.skip.0 -text "Skip" -variable [namespace current]::skip_sw -command [namespace current]::ctrlgui
+  label $w.top.right.traj.skip.inilabel -text "Ini:"
+  entry $w.top.right.traj.skip.ini -width 5 -textvariable [namespace current]::skip_ini
+  label $w.top.right.traj.skip.stepslabel -text "Steps:"
+  entry $w.top.right.traj.skip.steps -width 5 -textvariable [namespace current]::skip_steps
+  pack $w.top.right.traj.skip.0 $w.top.right.traj.skip.inilabel $w.top.right.traj.skip.ini $w.top.right.traj.skip.stepslabel $w.top.right.traj.skip.steps  -side left -anchor nw
 
   frame $w.top.right.traj.time -relief ridge -bd 0
   pack $w.top.right.traj.time -side top -fill x
 
-  checkbutton $w.top.right.traj.time.0 -text "Time (ps)" -variable [namespace current]::time_sw -command ::rmsdtt::ctrlgui
-  label $w.top.right.traj.time.inilabel -text "Ini:" -padx 3 -pady 3
-  entry $w.top.right.traj.time.inival -bd 0 -selectborderwidth 0 -exportselection yes -width 6 -textvariable [namespace current]::time_ini
-  label $w.top.right.traj.time.steplabel -text "Step:" -padx 3 -pady 3
-  entry $w.top.right.traj.time.stepval -bd 0 -selectborderwidth 0 -exportselection yes -width 6 -textvariable [namespace current]::time_step
-  pack $w.top.right.traj.time.0 $w.top.right.traj.time.inilabel $w.top.right.traj.time.inival\
-    $w.top.right.traj.time.steplabel $w.top.right.traj.time.stepval\
-    -side left -fill x -padx 2 -pady 2
+  checkbutton $w.top.right.traj.time.0 -text "Time" -variable [namespace current]::time_sw -command [namespace current]::ctrlgui
+  label $w.top.right.traj.time.inilabel -text "Ini:"
+  entry $w.top.right.traj.time.inival -width 6 -textvariable [namespace current]::time_ini
+  label $w.top.right.traj.time.steplabel -text "Step:"
+  entry $w.top.right.traj.time.stepval -width 6 -textvariable [namespace current]::time_step
+  pack $w.top.right.traj.time.0 $w.top.right.traj.time.inilabel $w.top.right.traj.time.inival $w.top.right.traj.time.steplabel $w.top.right.traj.time.stepval -side left -anchor nw
 
   frame $w.top.right.traj.file -relief ridge -bd 0
   pack $w.top.right.traj.file -side top -fill x
 
   checkbutton $w.top.right.traj.file.plot -text "Plot" -variable [namespace current]::plot_sw
-  checkbutton $w.top.right.traj.file.0 -text "Save to file:" -variable [namespace current]::save_sw -command [namespace code {
+  checkbutton $w.top.right.traj.file.0 -text "Save to file:" -variable [namespace current]::save_sw\
+    -command [namespace code {
       if {$save_sw} {
 	$w.top.right.traj.file.name config -state normal
       } else {
 	$w.top.right.traj.file.name config -state disable
       }
     }]
-  entry $w.top.right.traj.file.name -bd 0 -selectborderwidth 0 -exportselection yes -width 15 -textvariable [namespace current]::save_file -state disable
-  pack $w.top.right.traj.file.plot $w.top.right.traj.file.0 $w.top.right.traj.file.name\
-    -side left -fill x -padx 2 -pady 2
-
-
-  # Scrollbar for the data
-  frame $w.scrbar
-  pack $w.scrbar -side right -expand 1 -fill y
-
-  scrollbar $w.scrbar.scrbar -relief raised -activerelief raised -bd 2 -elementborderwidth 2 -orient vert -command {rmsdtt::scroll_data}
-  pack $w.scrbar.scrbar -expand 1 -fill y
+  entry $w.top.right.traj.file.name -width 15 -textvariable [namespace current]::save_file -state disable
+  pack $w.top.right.traj.file.plot $w.top.right.traj.file.0 $w.top.right.traj.file.name -side left -anchor nw
 
   # Data
   frame $w.data -relief ridge -bd 2
-  pack $w.data -side top -expand 1 -fill both
+  pack $w.data -side top -fill both -expand yes
   
-  grid columnconfigure $w.data 1 -weight 100
+  grid columnconfigure $w.data 1 -weight 1
+  grid rowconfigure $w.data 1 -weight 1
 
-  label $w.data.header_id  -text "id"  -width 2  -relief sunken -bd 1
-  label $w.data.header_mol -text "mol" -width 30 -relief sunken -bd 1
-  label $w.data.header_avg -text "avg" -width 7  -relief sunken -bd 1
-  label $w.data.header_sd  -text "sd"  -width 7  -relief sunken -bd 1
-  label $w.data.header_min -text "min" -width 7  -relief sunken -bd 1
-  label $w.data.header_max -text "max" -width 7  -relief sunken -bd 1
-  label $w.data.header_num -text "num" -width 4  -relief sunken -bd 1
+  label $w.data.header_id  -text "id"  -width 2  -relief sunken
+  label $w.data.header_mol -text "mol" -width 30 -relief sunken
+  label $w.data.header_avg -text "avg" -width 7  -relief sunken
+  label $w.data.header_sd  -text "sd"  -width 7  -relief sunken
+  label $w.data.header_min -text "min" -width 7  -relief sunken
+  label $w.data.header_max -text "max" -width 7  -relief sunken
+  label $w.data.header_num -text "num" -width 4  -relief sunken
   grid $w.data.header_id  -column 0 -row 0
   grid $w.data.header_mol -column 1 -row 0 -sticky we
   grid $w.data.header_avg -column 2 -row 0
@@ -259,28 +258,28 @@ proc rmsdtt::rmsdtt {} {
   grid $w.data.header_max -column 5 -row 0
   grid $w.data.header_num -column 6 -row 0
   
-  set datalist(id)  [listbox $w.data.body_id  -height 10 -width 2  -relief sunken -bd 1 -yscrollcommand [namespace code {$w.scrbar.scrbar set}]]
-  set datalist(mol) [listbox $w.data.body_mol -height 10 -width 30 -relief sunken -bd 1 -yscrollcommand [namespace code {$w.scrbar.scrbar set}]]
-  set datalist(avg) [listbox $w.data.body_avg -height 10 -width 7  -relief sunken -bd 1 -yscrollcommand [namespace code {$w.scrbar.scrbar set}]]
-  set datalist(sd)  [listbox $w.data.body_sd  -height 10 -width 7  -relief sunken -bd 1 -yscrollcommand [namespace code {$w.scrbar.scrbar set}]]
-  set datalist(min) [listbox $w.data.body_min -height 10 -width 7  -relief sunken -bd 1 -yscrollcommand [namespace code {$w.scrbar.scrbar set}]]
-  set datalist(max) [listbox $w.data.body_max -height 10 -width 7  -relief sunken -bd 1 -yscrollcommand [namespace code {$w.scrbar.scrbar set}]]
-  set datalist(num) [listbox $w.data.body_num -height 10 -width 4  -relief sunken -bd 1 -yscrollcommand [namespace code {$w.scrbar.scrbar set}]]
-  grid $w.data.body_id  -column 0 -row 1
-  grid $w.data.body_mol -column 1 -row 1 -sticky we
-  grid $w.data.body_avg -column 2 -row 1
-  grid $w.data.body_sd  -column 3 -row 1
-  grid $w.data.body_min -column 4 -row 1
-  grid $w.data.body_max -column 5 -row 1
-  grid $w.data.body_num -column 6 -row 1
+  set datalist(id)  [listbox $w.data.body_id  -height 10 -width 2  -relief sunken -yscrollcommand [namespace code {$w.data.scrbar set}]]
+  set datalist(mol) [listbox $w.data.body_mol -height 10 -width 30 -relief sunken -yscrollcommand [namespace code {$w.data.scrbar set}]]
+  set datalist(avg) [listbox $w.data.body_avg -height 10 -width 7  -relief sunken -yscrollcommand [namespace code {$w.data.scrbar set}]]
+  set datalist(sd)  [listbox $w.data.body_sd  -height 10 -width 7  -relief sunken -yscrollcommand [namespace code {$w.data.scrbar set}]]
+  set datalist(min) [listbox $w.data.body_min -height 10 -width 7  -relief sunken -yscrollcommand [namespace code {$w.data.scrbar set}]]
+  set datalist(max) [listbox $w.data.body_max -height 10 -width 7  -relief sunken -yscrollcommand [namespace code {$w.data.scrbar set}]]
+  set datalist(num) [listbox $w.data.body_num -height 10 -width 4  -relief sunken -yscrollcommand [namespace code {$w.data.scrbar set}]]
+  grid $w.data.body_id  -column 0 -row 1 -sticky ns
+  grid $w.data.body_mol -column 1 -row 1 -sticky nswe
+  grid $w.data.body_avg -column 2 -row 1 -sticky ns
+  grid $w.data.body_sd  -column 3 -row 1 -sticky ns
+  grid $w.data.body_min -column 4 -row 1 -sticky ns
+  grid $w.data.body_max -column 5 -row 1 -sticky ns
+  grid $w.data.body_num -column 6 -row 1 -sticky ns
 
-  label $w.data.footer_id  -text ""                                        -width 2  -anchor e -relief sunken -bd 1
-  label $w.data.footer_mol -text "Totals:"                                 -width 30 -anchor e -relief sunken -bd 1
-  label $w.data.footer_avg -textvariable [namespace current]::datatot(avg) -width 7  -anchor e -relief sunken -bd 1
-  label $w.data.footer_sd  -textvariable [namespace current]::datatot(sd)  -width 7  -anchor e -relief sunken -bd 1
-  label $w.data.footer_min -textvariable [namespace current]::datatot(min) -width 7  -anchor e -relief sunken -bd 1
-  label $w.data.footer_max -textvariable [namespace current]::datatot(max) -width 7  -anchor e -relief sunken -bd 1
-  label $w.data.footer_num -textvariable [namespace current]::datatot(num) -width 4  -anchor e -relief sunken -bd 1
+  label $w.data.footer_id  -text ""                                        -width 2  -anchor e -relief sunken
+  label $w.data.footer_mol -text "Overall:"                                -width 30 -anchor e -relief sunken
+  label $w.data.footer_avg -textvariable [namespace current]::datatot(avg) -width 7  -anchor e -relief sunken
+  label $w.data.footer_sd  -textvariable [namespace current]::datatot(sd)  -width 7  -anchor e -relief sunken
+  label $w.data.footer_min -textvariable [namespace current]::datatot(min) -width 7  -anchor e -relief sunken
+  label $w.data.footer_max -textvariable [namespace current]::datatot(max) -width 7  -anchor e -relief sunken
+  label $w.data.footer_num -textvariable [namespace current]::datatot(num) -width 4  -anchor e -relief sunken
   grid $w.data.footer_id  -column 0 -row 2
   grid $w.data.footer_mol -column 1 -row 2 -sticky we
   grid $w.data.footer_avg -column 2 -row 2
@@ -289,20 +288,29 @@ proc rmsdtt::rmsdtt {} {
   grid $w.data.footer_max -column 5 -row 2
   grid $w.data.footer_num -column 6 -row 2
 
+  # Scrollbar
+  scrollbar $w.data.scrbar -orient vert -command {rmsdtt::scroll_data}
+  #scrollbar $w.scrbar.scrbar -relief raised -activerelief raised -bd 2 -elementborderwidth 2 -orient vert -command {rmsdtt::scroll_data}
+  grid $w.data.scrbar -column 7 -row 0 -rowspan 3 -sticky ns
+
   # Add/remove molecules from the list
   frame $w.bottom
-  pack $w.bottom -side bottom -fill x -expand 1
+  pack $w.bottom -side bottom -fill x
 
-  button $w.bottom.delall -relief raised -bd 2 -text "Erase all" -command {rmsdtt::mol_del}
-  button $w.bottom.del -relief raised -bd 2 -text "Erase selected" -command {rmsdtt::mol_del 1}
-  button $w.bottom.addall -relief raised -bd 2 -text "Add all" -command {rmsdtt::mol_add}
-  button $w.bottom.add -relief raised -bd 2 -text "Add active" -command {rmsdtt::mol_add 1}
-  pack $w.bottom.delall $w.bottom.del $w.bottom.addall $w.bottom.add -side left -fill x -expand 1
+  button $w.bottom.delall -text "Erase all" -relief raised -command [namespace current]::mol_del
+  button $w.bottom.del    -text "Erase selected" -relief raised -command "[namespace current]::mol_del 1"
+  button $w.bottom.addall -text "Add all" -relief raised -command [namespace current]::mol_add
+  button $w.bottom.add    -text "Add active" -relief raised -command "[namespace current]::mol_add 1"
+  pack $w.bottom.delall $w.bottom.del $w.bottom.addall $w.bottom.add -side left -fill x -expand yes
 
   # Final code
-  rmsdtt::mol_add 1
-  update_swap_types
-  ctrlgui
+  [namespace current]::mol_add 1
+  [namespace current]::update_swap_types
+  [namespace current]::ctrlgui
+
+  update
+  wm minsize $w [winfo width $w] [winfo height $w]
+  wm resizable $w 1 1
 }
 
 
@@ -311,7 +319,9 @@ proc rmsdtt::doRmsd {} {
   variable traj_all
   variable traj_ref
   variable save_sw
+  variable save_file
   variable plot_sw
+  variable colorize
   variable rmsd_base
   variable swap_sw
   variable swap_print
@@ -468,7 +478,7 @@ proc rmsdtt::doRmsd {} {
       }
       set sd_tot [expr $sd_tot + $rms_sd($i)]
       if {$count($i) == 1} {
-	set rms_sd($i) [expr sqrt( $rms_sd($i) / $count($i) )]
+	set rms_sd($i) [expr sqrt($rms_sd($i))]
       } else {
 	set rms_sd($i) [expr sqrt( $rms_sd($i) / ($count($i)-1) )]
       }
@@ -476,7 +486,12 @@ proc rmsdtt::doRmsd {} {
       if {$rms_min($i) < $min_tot} {set min_tot $rms_min($i)}
       if {$rms_max($i) > $max_tot} {set max_tot $rms_max($i)}
     }
-    set sd_tot [expr sqrt($sd_tot / ([array size rmsd] - 1))]
+    set count_tot [array size rmsd]
+    if {$count_tot == 1} {
+      set sd_tot [expr sqrt($sd_tot)]
+    } else {
+      set sd_tot [expr sqrt($sd_tot / ($count_tot - 1))]
+    }
     #puts "DEBUG: sd_tot = $sd_tot"
   }
 
@@ -487,12 +502,12 @@ proc rmsdtt::doRmsd {} {
   foreach i $target_mol {
     $datalist(id)  insert end [format "%2s"    $i]
     $datalist(mol) insert end [format "%s"     [molinfo $i get name]]
-    $datalist(avg) insert end [format "%10.3f" $rms_ave($i)]
+    $datalist(avg) insert end [format "%8.3f" $rms_ave($i)]
     if {$stats} {
-      $datalist(sd)  insert end [format "%7.3f"  $rms_sd($i)]
-      $datalist(min) insert end [format "%10.3f" $rms_min($i)]
-      $datalist(max) insert end [format "%10.3f" $rms_max($i)]
-      $datalist(num) insert end [format "%5d"    $count($i)]
+      $datalist(sd)  insert end [format "%8.3f"  $rms_sd($i)]
+      $datalist(min) insert end [format "%8.3f" $rms_min($i)]
+      $datalist(max) insert end [format "%8.3f" $rms_max($i)]
+      $datalist(num) insert end [format "%4d"    $count($i)]
     } else {
       $datalist(sd)  insert end ""
       $datalist(min) insert end ""
@@ -500,23 +515,27 @@ proc rmsdtt::doRmsd {} {
       $datalist(num) insert end ""
     }
   }
-  set datatot(avg) [format "%10.3f" $rms_tot]
+  set datatot(avg) [format "%8.3f" $rms_tot]
   if {$stats} {
-    set datatot(sd)  [format "%7.3f"  $sd_tot]
-    set datatot(min) [format "%10.3f" $min_tot]
-    set datatot(max) [format "%10.3f" $max_tot]
-    set datatot(num) [format "%5d"    [array size rmsd]]
+    set datatot(sd)  [format "%8.3f"  $sd_tot]
+    set datatot(min) [format "%8.3f" $min_tot]
+    set datatot(max) [format "%8.3f" $max_tot]
+    set datatot(num) [format "%4d"    [array size rmsd]]
   }
 
-  rmsdtt::color_data
+  if {$traj_sw && $plot_sw  && !$traj_all && $colorize} {
+    [namespace current]::color_data 1
+  } else {
+    [namespace current]::color_data 0
+  }
 
   # Save and plot data
-  if {$save_sw} { saveData $save_file }
-  if {$plot_sw && !$traj_all} { doPlot }
+  if {$traj_sw && $save_sw} { saveData $save_file }
+  if {$traj_sw && $plot_sw && !$traj_all} { doPlot }
 
   #puts "DEBUG: ---------------------------------"
 
-  ListHisotryPullDownMenu
+  [namespace current]::ListHisotryPullDownMenu
 }
 
 
@@ -664,16 +683,17 @@ proc rmsdtt::doAlign {} {
       }
     } else {
       for {set j 0} {$j < [molinfo $i get numframes]} {incr j} {
-	if {$i != $ref_mol && $j != $traj_ref} {
-	  align $sel $j $sel_ref
+	if {$i == $ref_mol && $j == $traj_ref} {
+	  continue
 	}
+	align $sel $j $sel_ref
       }
     }
   }
 }
 
 
-proc rmsdtt::align { sel1 frame1 sel2} {
+proc rmsdtt::align {sel1 frame1 sel2} {
   $sel1 frame $frame1
   set tmatrix [measure fit $sel1 $sel2]
   set move_sel [atomselect [$sel1 molid] "all" frame $frame1]
@@ -682,7 +702,7 @@ proc rmsdtt::align { sel1 frame1 sel2} {
 }
 
 
-proc rmsdtt::SaveDataBrowse {} {
+proc rmsdtt::SaveDataBrowse { {type "data"} } {
   variable rmsd
 
   if {![array exists rmsd]} {
@@ -702,7 +722,11 @@ proc rmsdtt::SaveDataBrowse {} {
     return
   }
   
-  [namespace current]::saveData $file
+  if {$type == "data"} {
+    [namespace current]::saveData $file
+  } else {
+    [namespace current]::saveSummary $file
+  }
 }
 
 
@@ -811,10 +835,35 @@ proc rmsdtt::saveData { file } {
   }
 
   # Save to file
-  set fileout_id [open $save_file w]
-  fconfigure $fileout_id
-  puts $fileout_id $output
-  close $fileout_id
+  set fid [open $file w]
+  fconfigure $fid
+  puts $fid $output
+  close $fid
+}
+
+
+proc rmsdtt::saveSummary { file } {
+  variable datalist
+
+  if {$file == ""} {
+    showMessage "Filename is missing!"
+    return -code return
+  }
+
+  # Header
+  set output [format "%3s  %-25s  %8s  %8s  %8s  %8s  %4s\n" id mol avg sd min max num]
+  for {set i 0} {$i < [$datalist(id) size]} {incr i} {
+    append output [format "%3d  %-25s  %8.3f  %8.3f  %8.3f  %8.3f  %4d\n" [$datalist(id) get $i] \
+		     [$datalist(mol) get $i] [$datalist(avg) get $i] [$datalist(sd) get $i] \
+		     [$datalist(min) get $i] [$datalist(max) get $i] [$datalist(num) get $i]
+		  ]
+  }
+
+  # Save to file
+  set fid [open $file w]
+  fconfigure $fid
+  puts $fid $output
+  close $fid
 }
 
 
@@ -859,6 +908,16 @@ proc rmsdtt::tempfile {prefix suffix} {
   }
 }
 
+
+proc rmsdtt::index2rgb {i} {
+  set len 2
+  lassign [colorinfo rgb $i] r g b
+  set r [expr int($r*255)]
+  set g [expr int($g*255)]
+  set b [expr int($b*255)]
+  #puts "$i      $r $g $b"
+  return [format "#%.${len}X%.${len}X%.${len}X" $r $g $b]
+}
 
 proc rmsdtt::doPlot {} {
   variable rmsd
@@ -930,10 +989,10 @@ proc rmsdtt::doPlot {} {
     }
     
     if {$time_sw} {
-      set title "Rmsd vs Time"
-      set xlab "Time (ps)"
+      set title "Rmsd vs Time \"$rms_sel)\""
+      set xlab "Time"
     } else {
-      set title "Rmsd vs Frame"
+      set title "Rmsd vs Frame \"$rms_sel\""
       set xlab "Frame"
     }
     set ylab "Rmsd (A)"
@@ -941,7 +1000,7 @@ proc rmsdtt::doPlot {} {
     
     set k 0
     foreach i $target_mol {
-      set color [lindex [colorinfo colors] $k]
+      set color [index2rgb $i]
       set iname "[molinfo $i get name] ($i)"
       
       if {[llength $y($i)] == 1} {
@@ -970,7 +1029,7 @@ proc rmsdtt::doPlot {} {
       puts $pipe_id "@ subtitle \"$rms_sel\""
       if {$time_sw} {
 	puts $pipe_id "@ title \"Rmsd vs Time\""
-	puts $pipe_id "@ xaxis  label \"Time (ps)\""
+	puts $pipe_id "@ xaxis  label \"Time\""
       } else {
 	puts $pipe_id "@ title \"Rmsd vs Frame\""
 	puts $pipe_id "@ xaxis  label \"Frame\""
@@ -1030,7 +1089,7 @@ proc rmsdtt::doPlot {} {
       set cells [$worksheet Cells]
       if {$time_sw} {
 	set exceltitle "Rmsd vs Time"
-	$cells Item 1 1 "Time (ps)"
+	$cells Item 1 1 "Time"
       } else {
 	set exceltitle "Rmsd vs Frame"
 	$cells Item 1 1 "Frame"
@@ -1061,7 +1120,7 @@ proc rmsdtt::doPlot {} {
       $xaxis HasMajorGridlines 0
       $xaxis HasTitle 1
       if {$time_sw} {
-	[$xaxis AxisTitle] Text "Time (ps)"
+	[$xaxis AxisTitle] Text "Time"
       } else {
 	[$xaxis AxisTitle] Text "Frame"
       }
@@ -1136,7 +1195,6 @@ proc rmsdtt::showMessage {mess} {
   bell
   toplevel .messpop 
   grab .messpop
-  option add *Font {Helvetica -12 bold}
   wm title .messpop "Warning"
     message .messpop.msg -relief groove -bd 2 -text $mess -aspect 400 -justify center -padx 20 -pady 20
   
@@ -1193,17 +1251,21 @@ proc rmsdtt::ctrlgui {} {
       $w.top.right.traj.frames.reflabel config -state disable
       $w.top.right.traj.frames.all config -state disable
       $w.top.right.traj.frames.ref config -state disable
-      $w.top.left.swap.0 config -state disable
-      $w.top.left.swap.type config -state disable
-      $w.top.left.swap.list config -state disable
-      $w.top.left.swap.print config -state disable
+      if {$swap_use} {
+	$w.top.left.swap.0 config -state disable
+	$w.top.left.swap.type config -state disable
+	$w.top.left.swap.list config -state disable
+	$w.top.left.swap.print config -state disable
+      }
      } else {
       $w.top.right.traj.frames.reflabel config -state normal
       $w.top.right.traj.frames.all config -state normal
-      $w.top.left.swap.0 config -state normal
-      $w.top.left.swap.type config -state normal
-      $w.top.left.swap.list config -state normal
-      $w.top.left.swap.print config -state normal
+       if {$swap_use} {
+	 $w.top.left.swap.0 config -state normal
+	 $w.top.left.swap.type config -state normal
+	 $w.top.left.swap.list config -state normal
+	 $w.top.left.swap.print config -state normal
+       }
       if {$traj_all} {
 	$w.top.right.traj.frames.ref config -state disable
       } else {
@@ -1260,7 +1322,7 @@ proc rmsdtt::ctrlgui {} {
       $w.top.left.swap.print config -state normal
       $w.top.left.swap.list config -state normal
     }
-    update_swap_types
+    [namespace current]::update_swap_types
   }
 }
 
@@ -1287,7 +1349,10 @@ proc rmsdtt::ctrlbb { obj } {
 proc rmsdtt::update_swap_types {} {
   variable w
   variable swap_type
+  variable swap_use
 
+  if {!$swap_use} {return}
+  
   $w.top.left.swap.type.menu delete 0 end
   $w.top.left.swap.type.menu add radiobutton -value "all" -label "all" -variable ::rmsdtt::swap_type
 
@@ -1317,7 +1382,7 @@ proc rmsdtt::mol_del { {selected 0} } {
     foreach key [array names datalist] {
       $datalist($key) delete $index
     }
-    rmsdtt::color_data
+    [namespace current]::color_data
   } else {
     foreach key [array names datalist] {
       $datalist($key) delete 0 end
@@ -1340,25 +1405,29 @@ proc rmsdtt::mol_add { {active 0} } {
     foreach key [list avg sd min max num] {
       $datalist($key) insert end ""
     }
-    $datalist(id) insert end [format "%2s" [molinfo index $i]]
-    $datalist(mol) insert end [format "%s" [molinfo $i get name]]
+    $datalist(id) insert end [format "%2s" $molid]
+    $datalist(mol) insert end [format "%s" [molinfo $molid get name]]
   }
-  rmsdtt::color_data
+  [namespace current]::color_data
 }
 
 
-proc rmsdtt::color_data {} {
+proc rmsdtt::color_data { {colorize 0} } {
   variable datalist
 
   set color "grey85"
   for {set i 0} {$i < [$datalist(id) size]} {incr i} {
+    if {$colorize} {
+      set color [index2rgb $i]
+    } else {
+      if {$color == "grey80"} {
+	set color "grey85"
+      } else {
+	set color "grey80"
+      }
+    }
     foreach key [array names datalist] {
       $datalist($key) itemconfigure $i -background $color
-    }
-    if {$color == "grey85"} {
-      set color "grey80"
-    } else {
-      set color "grey85"
     }
   }
 }
@@ -1409,7 +1478,7 @@ proc rmsdtt::chooseHistoryItem {sel} {
       set noh 1
     }
   }
-  ctrlbb $mod
+  [namespace current]::ctrlbb $mod
 }
 
 
