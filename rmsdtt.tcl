@@ -83,7 +83,7 @@ proc rmsdtt::rmsdtt {} {
     wm deiconify $w
     return
   }
-
+  
   # GUI look
   #option add *rmsdtt.*font {Helvetica 9}
   #option add *rmsdtt.top.left.sel.background white
@@ -121,7 +121,7 @@ proc rmsdtt::rmsdtt {} {
   $w.menubar.options.menu.bbdef add radiobutton -label "C CA N O" -variable [namespace current]::bb_def -value "C CA N O"
   $w.menubar.options.menu add checkbutton -label "Statistics" -variable [namespace current]::stats -underline 0
   pack $w.menubar.options -side left
-
+  
   menubutton $w.menubar.help -text "Help" -menu $w.menubar.help.menu -underline 0 -pady 2 
   menu $w.menubar.help.menu -tearoff no
   $w.menubar.help.menu add command -label "About" -command [namespace current]::help_about
@@ -147,7 +147,7 @@ proc rmsdtt::rmsdtt {} {
   checkbutton $w.top.left.mods.noh -text "noh" -variable [namespace current]::noh -command "[namespace current]::ctrlbb noh"
   menubutton  $w.top.left.mods.selectionhistory -menu $w.top.left.mods.selectionhistory.m -text "History" -relief raised -direction flush
   menu $w.top.left.mods.selectionhistory.m -tearoff no
-  pack $w.top.left.mods.bb $w.top.left.mods.tr $w.top.left.mods.noh -side left -anchor nw
+  pack $w.top.left.mods.bb $w.top.left.mods.tr $w.top.left.mods.noh -side left -anchor w
   pack $w.top.left.mods.selectionhistory -side right
 
   # Swap
@@ -163,7 +163,7 @@ proc rmsdtt::rmsdtt {} {
     menu $w.top.left.swap.type.menu -tearoff no
     checkbutton $w.top.left.swap.print -text "verbose" -variable [namespace current]::swap_print
     button $w.top.left.swap.list -relief raised -text "List" -command [namespace code {::swap::list $swap_type}]
-    pack $w.top.left.swap.0 $w.top.left.swap.type $w.top.left.swap.print -side left -anchor nw
+    pack $w.top.left.swap.0 $w.top.left.swap.type $w.top.left.swap.print -side left -anchor w
     pack $w.top.left.swap.list -side right
   }
   
@@ -174,8 +174,8 @@ proc rmsdtt::rmsdtt {} {
   frame $w.top.right.pushfr -relief ridge -bd 2
   pack $w.top.right.pushfr -side top -fill x
 
-  button $w.top.right.pushfr.rmsd -text "RMSD" -relief raised -command [namespace current]::doRmsd
-  button $w.top.right.pushfr.align -text "Align" -relief raised -command [namespace current]::doAlign
+  button $w.top.right.pushfr.rmsd -text "RMSD" -relief raised -command [namespace current]::doRmsd -pady 2 -bd 2
+  button $w.top.right.pushfr.align -text "Align" -relief raised -command [namespace current]::doAlign -pady 2 -bd 2
   pack $w.top.right.pushfr.rmsd $w.top.right.pushfr.align -side left -fill x -expand yes
   
   # Ref mol
@@ -198,7 +198,7 @@ proc rmsdtt::rmsdtt {} {
   label $w.top.right.traj.frames.reflabel -text "Frame ref:"
   entry $w.top.right.traj.frames.ref -width 5 -textvariable [namespace current]::traj_ref
   checkbutton $w.top.right.traj.frames.all -text "All" -variable [namespace current]::traj_all -command [namespace current]::ctrlgui
-  pack $w.top.right.traj.frames.0 $w.top.right.traj.frames.reflabel $w.top.right.traj.frames.ref -side left -anchor nw -fill x
+  pack $w.top.right.traj.frames.0 $w.top.right.traj.frames.reflabel $w.top.right.traj.frames.ref -side left -anchor w -fill x
   pack $w.top.right.traj.frames.all -side right
   
   frame $w.top.right.traj.skip -relief ridge -bd 0
@@ -209,7 +209,7 @@ proc rmsdtt::rmsdtt {} {
   entry $w.top.right.traj.skip.ini -width 5 -textvariable [namespace current]::skip_ini
   label $w.top.right.traj.skip.stepslabel -text "Steps:"
   entry $w.top.right.traj.skip.steps -width 5 -textvariable [namespace current]::skip_steps
-  pack $w.top.right.traj.skip.0 $w.top.right.traj.skip.inilabel $w.top.right.traj.skip.ini $w.top.right.traj.skip.stepslabel $w.top.right.traj.skip.steps  -side left -anchor nw
+  pack $w.top.right.traj.skip.0 $w.top.right.traj.skip.inilabel $w.top.right.traj.skip.ini $w.top.right.traj.skip.stepslabel $w.top.right.traj.skip.steps -side left -anchor w
 
   frame $w.top.right.traj.time -relief ridge -bd 0
   pack $w.top.right.traj.time -side top -fill x
@@ -219,7 +219,7 @@ proc rmsdtt::rmsdtt {} {
   entry $w.top.right.traj.time.inival -width 6 -textvariable [namespace current]::time_ini
   label $w.top.right.traj.time.steplabel -text "Step:"
   entry $w.top.right.traj.time.stepval -width 6 -textvariable [namespace current]::time_step
-  pack $w.top.right.traj.time.0 $w.top.right.traj.time.inilabel $w.top.right.traj.time.inival $w.top.right.traj.time.steplabel $w.top.right.traj.time.stepval -side left -anchor nw
+  pack $w.top.right.traj.time.0 $w.top.right.traj.time.inilabel $w.top.right.traj.time.inival $w.top.right.traj.time.steplabel $w.top.right.traj.time.stepval -side left -anchor w
 
   frame $w.top.right.traj.file -relief ridge -bd 0
   pack $w.top.right.traj.file -side top -fill x
@@ -234,7 +234,7 @@ proc rmsdtt::rmsdtt {} {
       }
     }]
   entry $w.top.right.traj.file.name -width 15 -textvariable [namespace current]::save_file -state disable
-  pack $w.top.right.traj.file.plot $w.top.right.traj.file.0 $w.top.right.traj.file.name -side left -anchor nw
+  pack $w.top.right.traj.file.plot $w.top.right.traj.file.0 $w.top.right.traj.file.name -side left -anchor w
 
   # Data
   frame $w.data -relief ridge -bd 2
@@ -259,7 +259,7 @@ proc rmsdtt::rmsdtt {} {
   grid $w.data.header_num -column 6 -row 0
   
   set datalist(id)  [listbox $w.data.body_id  -height 10 -width 2  -relief sunken -yscrollcommand [namespace code {$w.data.scrbar set}]]
-  set datalist(mol) [listbox $w.data.body_mol -height 10 -width 30 -relief sunken -yscrollcommand [namespace code {$w.data.scrbar set}]]
+  set datalist(mol) [listbox $w.data.body_mol -height 10 -width 30 -relief sunken -yscrollcommand [namespace code {$w.data.scrbar set}] -selectmode extended]
   set datalist(avg) [listbox $w.data.body_avg -height 10 -width 7  -relief sunken -yscrollcommand [namespace code {$w.data.scrbar set}]]
   set datalist(sd)  [listbox $w.data.body_sd  -height 10 -width 7  -relief sunken -yscrollcommand [namespace code {$w.data.scrbar set}]]
   set datalist(min) [listbox $w.data.body_min -height 10 -width 7  -relief sunken -yscrollcommand [namespace code {$w.data.scrbar set}]]
@@ -287,16 +287,16 @@ proc rmsdtt::rmsdtt {} {
   grid $w.data.footer_min -column 4 -row 2
   grid $w.data.footer_max -column 5 -row 2
   grid $w.data.footer_num -column 6 -row 2
-
+  
   # Scrollbar
   scrollbar $w.data.scrbar -orient vert -command {rmsdtt::scroll_data}
   #scrollbar $w.scrbar.scrbar -relief raised -activerelief raised -bd 2 -elementborderwidth 2 -orient vert -command {rmsdtt::scroll_data}
   grid $w.data.scrbar -column 7 -row 0 -rowspan 3 -sticky ns
-
+  
   # Add/remove molecules from the list
   frame $w.bottom
   pack $w.bottom -side bottom -fill x
-
+  
   button $w.bottom.delall -text "Erase all" -relief raised -command [namespace current]::mol_del
   button $w.bottom.del    -text "Erase selected" -relief raised -command "[namespace current]::mol_del 1"
   button $w.bottom.addall -text "Add all" -relief raised -command [namespace current]::mol_add
@@ -307,7 +307,7 @@ proc rmsdtt::rmsdtt {} {
   [namespace current]::mol_add 1
   [namespace current]::update_swap_types
   [namespace current]::ctrlgui
-
+  
   update
   wm minsize $w [winfo width $w] [winfo height $w]
   wm resizable $w 1 1
@@ -334,7 +334,7 @@ proc rmsdtt::doRmsd {} {
   variable stats
 
   # Parse selection
-  set rms_sel [set_sel]
+  set rms_sel [[namespace current]::set_sel]
   if {$rms_sel == ""} {
     showMessage "Selection is empty selection!"
     return -code return
@@ -350,7 +350,8 @@ proc rmsdtt::doRmsd {} {
       set ref_mol "ave"
     }
     selected {
-      set ref_mol [$datalist(mol) index active]
+      set sel_index [$datalist(mol) index active]
+      set ref_mol [$datalist(id) get $sel_index]
     }
   }
   if {$rmsd_base == "ave"} {
@@ -515,6 +516,13 @@ proc rmsdtt::doRmsd {} {
       $datalist(num) insert end ""
     }
   }
+
+  if {$rmsd_base == "selected"} {
+    $datalist(mol) activate $sel_index
+    $datalist(mol) selection clear 0 end
+    $datalist(mol) selection set $sel_index
+  }
+
   set datatot(avg) [format "%8.3f" $rms_tot]
   if {$stats} {
     set datatot(sd)  [format "%8.3f"  $sd_tot]
@@ -664,7 +672,8 @@ proc rmsdtt::doAlign {} {
       set ref_mol [molinfo top]
     }
     selected {
-      set ref_mol [$datalist(mol) index active]
+      set sel_index [$datalist(mol) index active]
+      set ref_mol [$datalist(id) get $sel_index]
     }
     ave {
       showMessage "Average option not available for Alignment!"
@@ -672,7 +681,7 @@ proc rmsdtt::doAlign {} {
     }
   }
 
-  set rms_sel [set_sel]
+  set rms_sel [[namespace current]::set_sel]
   set sel_ref [atomselect $ref_mol $rms_sel frame $traj_ref]
   set target_mol [$datalist(id) get 0 end]
   foreach i $target_mol  {
@@ -689,6 +698,13 @@ proc rmsdtt::doAlign {} {
 	align $sel $j $sel_ref
       }
     }
+  }
+
+  if {$rmsd_base == "selected"} {
+    puts "inside"
+    $datalist(mol) activate $sel_index
+    $datalist(mol) selection clear 0 end
+    $datalist(mol) selection set $sel_index
   }
 }
 
@@ -1235,11 +1251,26 @@ proc rmsdtt::ctrlgui {} {
   variable swap_use
   variable noh
 
+  if {$rmsd_base == "ave"} {
+    $w.top.right.pushfr.align config -state disable
+    if {$swap_use} {
+      set swap_sw 0
+      $w.top.left.swap.0 config -state disable
+    }
+  } else {
+    $w.top.right.pushfr.align config -state normal
+    if {$swap_use} {
+      $w.top.left.swap.0 config -state normal
+    }
+  }
+
   if {$traj_sw} {
     if {$traj_all} {
       $w.top.right.traj.file.plot config -state disable
+      $w.top.right.pushfr.align config -state disable
     } else {
       $w.top.right.traj.file.plot config -state normal
+      $w.top.right.pushfr.align config -state normal
     }
     $w.top.right.traj.file.0 config -state normal
     if {$save_sw} {
@@ -1251,21 +1282,9 @@ proc rmsdtt::ctrlgui {} {
       $w.top.right.traj.frames.reflabel config -state disable
       $w.top.right.traj.frames.all config -state disable
       $w.top.right.traj.frames.ref config -state disable
-      if {$swap_use} {
-	$w.top.left.swap.0 config -state disable
-	$w.top.left.swap.type config -state disable
-	$w.top.left.swap.list config -state disable
-	$w.top.left.swap.print config -state disable
-      }
      } else {
       $w.top.right.traj.frames.reflabel config -state normal
       $w.top.right.traj.frames.all config -state normal
-       if {$swap_use} {
-	 $w.top.left.swap.0 config -state normal
-	 $w.top.left.swap.type config -state normal
-	 $w.top.left.swap.list config -state normal
-	 $w.top.left.swap.print config -state normal
-       }
       if {$traj_all} {
 	$w.top.right.traj.frames.ref config -state disable
       } else {
@@ -1311,16 +1330,17 @@ proc rmsdtt::ctrlgui {} {
 
   if {$swap_use} {
     if {$swap_sw} {
-      set noh 1
+      set noh 0
+      [namespace current]::ctrlbb noh
       $w.top.left.mods.noh config -state disable
-      $w.top.left.swap.type config -state disable
-      $w.top.left.swap.print config -state disable
-      $w.top.left.swap.list config -state disable
-    } else {
-      $w.top.left.mods.noh config -state normal
       $w.top.left.swap.type config -state normal
       $w.top.left.swap.print config -state normal
       $w.top.left.swap.list config -state normal
+    } else {
+      $w.top.left.mods.noh config -state normal
+      $w.top.left.swap.type config -state disable
+      $w.top.left.swap.print config -state disable
+      $w.top.left.swap.list config -state disable
     }
     [namespace current]::update_swap_types
   }
@@ -1376,11 +1396,13 @@ proc rmsdtt::scroll_data args {
 
 proc rmsdtt::mol_del { {selected 0} } {
   variable datalist
-
+  
   if {$selected} {
-    set index [$datalist(mol) index active]
+    set sele [lsort -integer -decreasing [$datalist(mol) curselection]]
     foreach key [array names datalist] {
-      $datalist($key) delete $index
+      foreach s $sele {
+	$datalist($key) delete $s
+      }
     }
     [namespace current]::color_data
   } else {
@@ -1393,7 +1415,7 @@ proc rmsdtt::mol_del { {selected 0} } {
 
 proc rmsdtt::mol_add { {active 0} } {
   variable datalist
-
+  
   foreach key [array names datalist] {
     $datalist($key) delete 0 end
   }
@@ -1487,7 +1509,7 @@ proc rmsdtt::help_about { {parent .rmsdtt} } {
   tk_messageBox -title "About RMSDTT v$vn" -parent $parent -message \
     "RMSDTT v$vn plugin for VMD
 
-Copyright (C) Luis Gracia <lug2002@med.cornell.edu> 
+Copyright (C) 2006 Luis Gracia <lug2002@med.cornell.edu> 
 
 "
 }
