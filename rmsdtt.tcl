@@ -2,6 +2,8 @@
 #             RMSD Trajectory Tool v2.0
 #
 # A GUI interface for RMSD alignment and analysis of trajectories
+#
+# http://physiology.med.cornell.edu/faculty/hweinstein/vmdplugins/rmsdtt
 
 # Author
 # ------
@@ -14,18 +16,10 @@
 #   Pascal Mercier, PhD, Biochemistry Dept, Univ. of Alberta, Edmonton, Canada
 #   John Stone, TB Group, UIUC
 
-# Installation
-# ------------
-# To add this pluging to the VMD extensions menu you can either:
-# a) add this to your .vmdrc:
-#    vmd_install_extension rmsdtt rmsdtt_tk_cb "WMC PhysBio/RMSDTT"
-#
-# b) add this to your .vmdrc
-#    if { [catch {package require rmsdtt} msg] } {
-#      puts "VMD RMSDTT package could not be loaded:\n$msg"
-#    } elseif { [catch {menu tk register "rmsdtt" rmsdtt} msg] } {
-#      puts "VMD RMSDTT could not be started:\n$msg"
-#    }
+# Documentation
+# -------------
+# See the index.html file distributed with this file. For more update documentation see
+# http://physiology.med.cornell.edu/faculty/hweinstein/vmdplugins/rmsdtt
 
 
 package provide rmsdtt 2.0
@@ -63,7 +57,8 @@ proc rmsdtt::rmsdtt {} {
   variable traj_ref   0
   variable traj_all   0
   variable skip_sw    0
-  variable skip_ini   0
+  variable skip_start 0
+  variable skip_end   "end"
   variable skip_steps 1
   variable time_sw    0
   variable time_ini   0.0
@@ -182,10 +177,11 @@ proc rmsdtt::rmsdtt {} {
   frame $w.top.right.ref -relief ridge -bd 2
   pack $w.top.right.ref -side top -fill x
 
+  label $w.top.right.ref.label -text "Ref:"
   radiobutton $w.top.right.ref.0 -text "Top" -variable [namespace current]::rmsd_base -value "top" -command [namespace current]::ctrlgui
   radiobutton $w.top.right.ref.1 -text "Average" -variable [namespace current]::rmsd_base -value "ave" -command [namespace current]::ctrlgui
   radiobutton $w.top.right.ref.2 -text "Selected" -variable [namespace current]::rmsd_base -value "selected" -command [namespace current]::ctrlgui
-  pack $w.top.right.ref.0 $w.top.right.ref.1 $w.top.right.ref.2 -side left -expand yes
+  pack $w.top.right.ref.label $w.top.right.ref.0 $w.top.right.ref.1 $w.top.right.ref.2 -side left -expand yes
 
   # Trajectory
   frame $w.top.right.traj -relief ridge -bd 2
@@ -205,11 +201,14 @@ proc rmsdtt::rmsdtt {} {
   pack $w.top.right.traj.skip -side top -fill x
 
   checkbutton $w.top.right.traj.skip.0 -text "Skip" -variable [namespace current]::skip_sw -command [namespace current]::ctrlgui
-  label $w.top.right.traj.skip.inilabel -text "Ini:"
-  entry $w.top.right.traj.skip.ini -width 5 -textvariable [namespace current]::skip_ini
+  label $w.top.right.traj.skip.inilabel -text "Start:"
+  entry $w.top.right.traj.skip.ini -width 5 -textvariable [namespace current]::skip_start
+  label $w.top.right.traj.skip.endlabel -text "End:"
+  entry $w.top.right.traj.skip.end -width 5 -textvariable [namespace current]::skip_end
   label $w.top.right.traj.skip.stepslabel -text "Steps:"
   entry $w.top.right.traj.skip.steps -width 5 -textvariable [namespace current]::skip_steps
   pack $w.top.right.traj.skip.0 $w.top.right.traj.skip.inilabel $w.top.right.traj.skip.ini $w.top.right.traj.skip.stepslabel $w.top.right.traj.skip.steps -side left -anchor w
+  # $w.top.right.traj.skip.endlabel $w.top.right.traj.skip.end 
 
   frame $w.top.right.traj.time -relief ridge -bd 0
   pack $w.top.right.traj.time -side top -fill x
@@ -258,13 +257,13 @@ proc rmsdtt::rmsdtt {} {
   grid $w.data.header_max -column 5 -row 0
   grid $w.data.header_num -column 6 -row 0
   
-  set datalist(id)  [listbox $w.data.body_id  -height 10 -width 2  -relief sunken -yscrollcommand [namespace code {$w.data.scrbar set}]]
-  set datalist(mol) [listbox $w.data.body_mol -height 10 -width 30 -relief sunken -yscrollcommand [namespace code {$w.data.scrbar set}] -selectmode extended]
-  set datalist(avg) [listbox $w.data.body_avg -height 10 -width 7  -relief sunken -yscrollcommand [namespace code {$w.data.scrbar set}]]
-  set datalist(sd)  [listbox $w.data.body_sd  -height 10 -width 7  -relief sunken -yscrollcommand [namespace code {$w.data.scrbar set}]]
-  set datalist(min) [listbox $w.data.body_min -height 10 -width 7  -relief sunken -yscrollcommand [namespace code {$w.data.scrbar set}]]
-  set datalist(max) [listbox $w.data.body_max -height 10 -width 7  -relief sunken -yscrollcommand [namespace code {$w.data.scrbar set}]]
-  set datalist(num) [listbox $w.data.body_num -height 10 -width 4  -relief sunken -yscrollcommand [namespace code {$w.data.scrbar set}]]
+  set datalist(id)  [listbox $w.data.body_id  -height 10 -width 2  -relief sunken -exportselection 0 -yscrollcommand [namespace current]::data_yset -selectmode extended]
+  set datalist(mol) [listbox $w.data.body_mol -height 10 -width 30 -relief sunken -exportselection 0 -yscrollcommand [namespace current]::data_yset -selectmode extended]
+  set datalist(avg) [listbox $w.data.body_avg -height 10 -width 7  -relief sunken -exportselection 0 -yscrollcommand [namespace current]::data_yset -selectmode extended]
+  set datalist(sd)  [listbox $w.data.body_sd  -height 10 -width 7  -relief sunken -exportselection 0 -yscrollcommand [namespace current]::data_yset -selectmode extended]
+  set datalist(min) [listbox $w.data.body_min -height 10 -width 7  -relief sunken -exportselection 0 -yscrollcommand [namespace current]::data_yset -selectmode extended]
+  set datalist(max) [listbox $w.data.body_max -height 10 -width 7  -relief sunken -exportselection 0 -yscrollcommand [namespace current]::data_yset -selectmode extended]
+  set datalist(num) [listbox $w.data.body_num -height 10 -width 4  -relief sunken -exportselection 0 -yscrollcommand [namespace current]::data_yset -selectmode extended]
   grid $w.data.body_id  -column 0 -row 1 -sticky ns
   grid $w.data.body_mol -column 1 -row 1 -sticky nswe
   grid $w.data.body_avg -column 2 -row 1 -sticky ns
@@ -272,6 +271,10 @@ proc rmsdtt::rmsdtt {} {
   grid $w.data.body_min -column 4 -row 1 -sticky ns
   grid $w.data.body_max -column 5 -row 1 -sticky ns
   grid $w.data.body_num -column 6 -row 1 -sticky ns
+
+  foreach key [array names datalist] {
+    bind $w.data.body_$key <<ListboxSelect>> "[namespace current]::multiple_sel %W"
+  }
 
   label $w.data.footer_id  -text ""                                        -width 2  -anchor e -relief sunken
   label $w.data.footer_mol -text "Overall:"                                -width 30 -anchor e -relief sunken
@@ -289,7 +292,7 @@ proc rmsdtt::rmsdtt {} {
   grid $w.data.footer_num -column 6 -row 2
   
   # Scrollbar
-  scrollbar $w.data.scrbar -orient vert -command {rmsdtt::scroll_data}
+  scrollbar $w.data.scrbar -orient vert -command [namespace current]::data_yview
   #scrollbar $w.scrbar.scrbar -relief raised -activerelief raised -bd 2 -elementborderwidth 2 -orient vert -command {rmsdtt::scroll_data}
   grid $w.data.scrbar -column 7 -row 0 -rowspan 3 -sticky ns
   
@@ -350,7 +353,11 @@ proc rmsdtt::doRmsd {} {
       set ref_mol "ave"
     }
     selected {
-      set sel_index [$datalist(mol) index active]
+      set sel_index [lindex [$datalist(mol) curselection] 0]
+      if {$sel_index == ""} {
+	showMessage "No molecule has been selected!"
+	return -code return
+      }
       set ref_mol [$datalist(id) get $sel_index]
     }
   }
@@ -518,9 +525,10 @@ proc rmsdtt::doRmsd {} {
   }
 
   if {$rmsd_base == "selected"} {
-    $datalist(mol) activate $sel_index
-    $datalist(mol) selection clear 0 end
-    $datalist(mol) selection set $sel_index
+    foreach key [array names datalist] {
+      $datalist($key) selection clear 0 end
+      $datalist($key) selection set $sel_index
+    }
   }
 
   set datatot(avg) [format "%8.3f" $rms_tot]
@@ -672,7 +680,11 @@ proc rmsdtt::doAlign {} {
       set ref_mol [molinfo top]
     }
     selected {
-      set sel_index [$datalist(mol) index active]
+      set sel_index [lindex [$datalist(mol) curselection] 0]
+      if {$sel_index == ""} {
+	showMessage "No molecule has been selected!"
+	return -code return
+      }
       set ref_mol [$datalist(id) get $sel_index]
     }
     ave {
@@ -701,10 +713,10 @@ proc rmsdtt::doAlign {} {
   }
 
   if {$rmsd_base == "selected"} {
-    puts "inside"
-    $datalist(mol) activate $sel_index
-    $datalist(mol) selection clear 0 end
-    $datalist(mol) selection set $sel_index
+    foreach key [array names datalist] {
+      $datalist($key) selection clear 0 end
+      $datalist($key) selection set $sel_index
+    }
   }
 }
 
@@ -753,7 +765,8 @@ proc rmsdtt::saveData { file } {
   variable time_ini
   variable time_step
   variable skip_sw
-  variable skip_ini
+  variable skip_start
+  variable skip_end
   variable skip_steps
   variable rmsd
   variable ref_mol
@@ -765,7 +778,12 @@ proc rmsdtt::saveData { file } {
   }
 
   if {$skip_sw} {
-    set ini $skip_ini
+    set ini $skip_start
+    if {$skip_end == "end"} {
+      #set end [expr [llength $list] -1]
+    } else {
+      #set end [lsearch $list $skip_end]
+    }
     set steps [expr $skip_steps+1]
   } else {
     set ini 0
@@ -940,9 +958,10 @@ proc rmsdtt::doPlot {} {
   variable rms_sel
   variable time_sw
   variable time_ini
-  variable time_steps
+  variable time_step
   variable skip_sw
-  variable skip_ini
+  variable skip_start
+  variable skip_end
   variable skip_steps
   variable ref_mol
   variable ref_frames
@@ -956,7 +975,7 @@ proc rmsdtt::doPlot {} {
   
 
   if {$skip_sw} {
-    set ini $skip_ini
+    set ini $skip_start
     set steps [expr $skip_steps+1]
   } else {
     set ini 0
@@ -1016,7 +1035,11 @@ proc rmsdtt::doPlot {} {
     
     set k 0
     foreach i $target_mol {
-      set color [index2rgb $i]
+      set coln $i
+      while {$coln > 15} {
+	set coln [expr $coln - 16]
+      }
+      set color [index2rgb $coln]
       set iname "[molinfo $i get name] ($i)"
       
       if {[llength $y($i)] == 1} {
@@ -1181,7 +1204,8 @@ proc rmsdtt::set_sel {} {
 
 proc rmsdtt::get_frames_for_mol { mol } {
   variable skip_sw
-  variable skip_ini
+  variable skip_start
+  variable skip_end
   variable skip_steps
   variable traj_sw
 
@@ -1194,8 +1218,13 @@ proc rmsdtt::get_frames_for_mol { mol } {
     
     if {$skip_sw} {
       set result {}
-      set s [expr $skip_steps + 1]
-      for {set i $skip_ini} {$i < [llength $list]} {incr i $s} {
+      set steps [expr $skip_steps + 1]
+      if {$skip_end == "end"} {
+	set end [expr [llength $list] -1]
+      } else {
+	set end [lsearch $list $skip_end]
+      }
+      for {set i $skip_start} {$i <= $end} {incr i $steps} {
 	lappend result [lindex $list $i]
       }
       set list $result
@@ -1245,24 +1274,9 @@ proc rmsdtt::ctrlgui {} {
   variable rmsd_base
   variable time_sw
   variable skip_sw
-  variable skip_ini
-  variable skip_steps
   variable swap_sw
   variable swap_use
   variable noh
-
-  if {$rmsd_base == "ave"} {
-    $w.top.right.pushfr.align config -state disable
-    if {$swap_use} {
-      set swap_sw 0
-      $w.top.left.swap.0 config -state disable
-    }
-  } else {
-    $w.top.right.pushfr.align config -state normal
-    if {$swap_use} {
-      $w.top.left.swap.0 config -state normal
-    }
-  }
 
   if {$traj_sw} {
     if {$traj_all} {
@@ -1302,6 +1316,19 @@ proc rmsdtt::ctrlgui {} {
     $w.top.right.traj.frames.ref config -state disable
     $w.top.right.traj.time.0 config -state disable
     $w.top.right.traj.skip.0 config -state disable
+  }
+
+  if {$rmsd_base == "ave"} {
+    $w.top.right.pushfr.align config -state disable
+    if {$swap_use} {
+      set swap_sw 0
+      $w.top.left.swap.0 config -state disable
+    }
+  } else {
+    $w.top.right.pushfr.align config -state normal
+    if {$swap_use} {
+      $w.top.left.swap.0 config -state normal
+    }
   }
 
   if {$time_sw && $traj_sw} {
@@ -1386,10 +1413,30 @@ proc rmsdtt::update_swap_types {} {
 }
 
 
-proc rmsdtt::scroll_data args {
+proc rmsdtt::data_yset args {
+  variable w
+  eval [linsert $args 0 $w.data.scrbar set]
+  [namespace current]::data_yview moveto [lindex [$w.data.scrbar get] 0]
+}
+
+
+proc rmsdtt::data_yview args {
   variable datalist
   foreach key [array names datalist] {
-    eval "$datalist($key) yview $args"
+    eval [linsert $args 0 $datalist($key) yview]
+  }
+}
+
+
+proc rmsdtt::multiple_sel {widget} {
+  variable datalist
+
+  set sel [$widget curselection]
+  foreach key [array names datalist] {
+    $datalist($key) selection clear 0 end
+    foreach item $sel {
+      $datalist($key) selection set $item
+    }
   }
 }
 
@@ -1440,7 +1487,11 @@ proc rmsdtt::color_data { {colorize 0} } {
   set color "grey85"
   for {set i 0} {$i < [$datalist(id) size]} {incr i} {
     if {$colorize} {
-      set color [index2rgb $i]
+      set coln [$datalist(id) get $i]
+      while {$coln > 15} {
+	set coln [expr $coln - 16]
+      }
+      set color [index2rgb $coln]
     } else {
       if {$color == "grey80"} {
 	set color "grey85"
