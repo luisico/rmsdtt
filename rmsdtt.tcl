@@ -89,7 +89,7 @@ proc rmsdtt::rmsdtt {} {
 
   # Main window
   set w [toplevel ".rmsdtt"]
-  wm title $w "RMSD Trajectory Tool"
+  wm title $w "WMC PhysBio - RMSD Trajectory Tool"
 
   # Menu
   frame $w.menubar -relief raised -bd 2
@@ -1557,8 +1557,14 @@ proc rmsdtt::chooseHistoryItem {sel} {
 
 proc rmsdtt::help_about { {parent .rmsdtt} } {
   set vn [package present rmsdtt]
-  tk_messageBox -title "About RMSDTT v$vn" -parent $parent -message \
+  tk_messageBox -title "WMC PhysBio - About RMSDTT v$vn" -parent $parent -message \
     "RMSDTT v$vn plugin for VMD
+
+Luis Gracia
+Department of Physiology & Biophysics
+Weill Medical College of Cornell University
+1300 York Avenue
+New York, NY 10021
 
 Copyright (C) 2006 Luis Gracia <lug2002@med.cornell.edu> 
 
