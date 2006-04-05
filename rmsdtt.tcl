@@ -22,7 +22,7 @@
 # http://physiology.med.cornell.edu/faculty/hweinstein/vmdplugins/rmsdtt
 
 
-package provide rmsdtt 2.0
+package provide rmsdtt 2.01
 
 namespace eval ::rmsdtt:: {
   namespace export rmsdtt
@@ -235,6 +235,51 @@ proc rmsdtt::rmsdtt {} {
   entry $w.top.right.traj.file.name -width 15 -textvariable [namespace current]::save_file -state disable
   pack $w.top.right.traj.file.plot $w.top.right.traj.file.0 $w.top.right.traj.file.name -side left -anchor w
 
+  # ByRes
+  variable use_byres 1
+  if {$use_byres} {
+    variable byres_niter 2
+    variable byres_factor 1.0
+    variable byres_plot  0
+    variable byres_scale "unchanged"
+    variable byres_update 0
+    variable byres_repre 0
+    variable byres_sel2 "all"
+    variable byres_style "NewRibbons"
+    variable byres_frames_all 1
+    variable byres_replace 1
+    
+    frame $w.byres -relief ridge -bd 2
+    pack $w.byres -side top -fill x
+    
+    button $w.byres.button -relief raised -bd 2 -text "FitByRes" -command [namespace current]::doByRes
+    label $w.byres.niterlabel -text "Iters:"
+    entry $w.byres.niter -width 4 -textvariable [namespace current]::byres_niter
+    label $w.byres.factorlabel -text "Factor:"
+    entry $w.byres.factor -width 4 -textvariable [namespace current]::byres_factor
+    checkbutton $w.byres.plot -text "Plot" -variable [namespace current]::byres_plot
+    
+    checkbutton $w.byres.repre -text "Rep" -variable [namespace current]::byres_repre
+    entry $w.byres.sel2 -width 10 -textvariable [namespace current]::byres_sel2
+    checkbutton $w.byres.replace -text "replace" -variable [namespace current]::byres_replace
+    menubutton $w.byres.style -text "Style" -menu $w.byres.style.menu -relief raised -direction flush
+    menu $w.byres.style.menu -tearoff no
+    foreach style [list Lines Bonds DynamicBonds HBonds Points VDW CPK Licorice Trace Tube Ribbons NewRibbons Cartoon NewCartoon MSMS Surf VolumeSlice Isosurface Dotted Solvent] {
+      $w.byres.style.menu add radiobutton -label $style -variable [namespace current]::byres_style -value $style
+    }
+    menubutton $w.byres.scale -text "Scale" -menu $w.byres.scale.menu -relief raised -direction flush
+    menu $w.byres.scale.menu -tearoff no
+    foreach item [list unchanged RGB BGR RWB BWR RWG GWR GWB BWG BlkW WBlk] {
+      $w.byres.scale.menu add radiobutton -label $item -variable [namespace current]::byres_scale -value $item
+    }
+    checkbutton $w.byres.framesall -text "all frames" -variable [namespace current]::byres_frames_all
+    
+    checkbutton $w.byres.update -text "Update" -variable [namespace current]::byres_update
+    
+    pack $w.byres.button $w.byres.niterlabel $w.byres.niter $w.byres.factorlabel $w.byres.factor $w.byres.plot -side left -anchor w
+    pack $w.byres.repre $w.byres.sel2 $w.byres.replace $w.byres.style $w.byres.scale $w.byres.framesall $w.byres.update -side left -anchor w
+  }
+  
   # Data
   frame $w.data -relief ridge -bd 2
   pack $w.data -side top -fill both -expand yes
@@ -718,6 +763,241 @@ proc rmsdtt::doAlign {} {
       $datalist($key) selection set $sel_index
     }
   }
+}
+
+
+proc rmsdtt::doByRes {} {
+  # Code developed with Josh Speidel
+  #       Weill Medical College, Cornel University, NY
+
+  variable w
+  variable datalist
+  variable byres_niter
+  variable byres_factor
+  variable byres_plot
+  variable byres_scale
+  variable byres_update
+  variable byres_repre
+  variable byres_sel2
+  variable byres_style
+  variable byres_frames_all
+  variable byres_replace
+  variable byres_rep
+  
+  set sel1 [set_sel]
+  if {$sel1 == ""} {
+    showMessage "Selection is empty selection!"
+    return -code return
+  }
+  set sel2 $byres_sel2
+  puts $sel1
+  puts $sel2
+  
+  set target_mol [$datalist(id) get 0 end]
+  
+  foreach mol $target_mol  {
+    set sel_ref($mol) [atomselect $mol $sel1]
+    set sel_current($mol) [atomselect $mol $sel1]
+    set sel_move($mol) [atomselect $mol "all"]
+  }
+  
+  # Check number of atoms
+  set message ""
+  for {set i 0} {$i < [llength $target_mol]} {incr i} {
+    set mol1 [lindex $target_mol $i]
+    for {set j [expr $i+1]} {$j < [llength $target_mol]} {incr j} {
+      set mol2 [lindex $target_mol $j]
+      if {[$sel_ref($mol1) num] != [$sel_ref($mol2) num]} {
+	append message "$mol1 ([$sel_ref($mol1) num])\t\t$mol2 ([$sel_ref($mol2) num])\n"
+      }
+    }
+  }
+  if {$message != ""} {
+    set message "Number of atoms selected differ for molecules:\n$message"
+    showMessage $message
+    return -code return
+  }
+  
+  # Set the user field of all frames = 1 for use in initial weighting scheme
+  foreach mol $target_mol  {
+    set sel2_atoms [atomselect $mol $sel2]
+    for {set i 0} {$i < [molinfo $mol get numframes]} {incr i} {
+      $sel2_atoms frame $i
+      $sel2_atoms set user 1
+    }
+  }
+  
+  # Make objects for residue sel
+  #set residues [lsort -unique -integer [$sel2_atoms get residue]]
+  set residues [lsort -unique -integer [[atomselect $mol $sel1] get residue]]
+  foreach mol $target_mol  {
+    foreach res $residues {
+      #set sel_res_ref($mol:$res) [atomselect $mol "residue $res and $sel2"]
+      #set sel_res($mol:$res)     [atomselect $mol "residue $res and $sel2"]
+      set sel_res_ref($mol:$res) [atomselect $mol "residue $res and $sel1"]
+      set sel_res($mol:$res)     [atomselect $mol "residue $res and $sel1"]
+      puts "$mol - $res - [$sel_res_ref($mol:$res) get index]"
+    }
+  }
+  
+  # Plot
+  set plot_use 0
+  if {$byres_plot} {
+    if [catch {package require multiplot} msg] {
+      showMessage "Plotting in Multiplot not available: package multiplot not installed!\nDo you have the latest VMD version?"
+    } else {
+      set plot_use 1
+      set title "Rmsd vs Residue"
+      set xlab "Residue"
+      set ylab "Rmsd (A)"
+      set plothandle [multiplot -title $title -xlabel $xlab -ylabel $ylab -nostats]
+    }
+  }
+  
+  if {$byres_repre} {
+    # Create representation
+    foreach mol $target_mol {
+      mol rep $byres_style
+      mol color user
+      mol selection $sel2
+      set mol [expr $mol+0]
+      set add 1
+      if {$byres_replace} {
+	if {[info exists byres_rep($mol)]} {
+	  for {set i 0} {$i < [molinfo $mol get numreps]} { incr i} {
+	    #puts "$i [mol repname $mol $i]"
+	    if {$byres_rep($mol) eq [mol repname $mol $i]} {
+	      mol modrep [mol repindex $mol $byres_rep($mol)] $mol
+	      set add 0
+	      break
+	    }
+	  }
+	}
+      }
+      if {$add} {
+	mol addrep $mol
+	set byres_rep($mol) [mol repname $mol [expr [molinfo $mol get numreps]-1]]
+      }
+      if {$byres_frames_all} {
+	mol drawframes $mol [mol repindex $mol $byres_rep($mol)] 0:[molinfo $mol get numframes]
+      } else {
+	mol drawframes $mol [mol repindex $mol $byres_rep($mol)] now
+      }
+      #      mol modstyle [mol repindex $mol $byres_rep($mol)] $mol $byres_style
+      #      mol modcolor [mol repindex $mol $byres_rep($mol)] $mol user
+      #      mol modselect [mol repindex $mol $byres_rep($mol)] $mol $sel2
+    }
+    
+    # Change scale
+    if {$byres_scale != "unchanged"} {
+      color scale method $byres_scale
+    }
+  }
+
+  if {$byres_update} {display update}
+
+  # Iterate over fitting and weighting niter times
+  set iter 1
+  while {$iter <= $byres_niter} {
+
+    foreach res $residues {
+      set rmsd_res($res) 0
+    }
+
+    set count 0
+    for {set i 0} {$i < [llength $target_mol]} {incr i} {
+      set mol1 [lindex $target_mol $i]
+      for {set j 0} {$j < [molinfo $mol1 get numframes]} {incr j} {
+	$sel_ref($mol1) frame $j
+	foreach res $residues {
+	  $sel_res_ref($mol1:$res) frame $j
+	}
+	
+	for {set k 0} {$k < [llength $target_mol]} {incr k} {
+	  set mol2 [lindex $target_mol $k]
+	  for {set l 0} {$l < [molinfo $mol2 get numframes]} {incr l} {
+	    if {$mol1 == $mol2 && $j == $l} {continue}
+	    
+	    incr count
+	    $sel_move($mol2) frame $l
+	    $sel_current($mol2) frame $l
+	    set trans_mat [measure fit $sel_current($mol2) $sel_ref($mol1) weight user]
+	    $sel_move($mol2) move $trans_mat
+	    
+	    # Compute rmsd for each residue
+	    foreach res $residues {
+	      $sel_res($mol2:$res) frame $l
+	      set rmsd [measure rmsd $sel_res_ref($mol1:$res) $sel_res($mol2:$res)]
+	      set rmsd_res($res) [expr $rmsd_res($res) + $rmsd]
+	    }
+	  }
+	}
+      }
+    }
+    
+    if {$byres_update} {
+      display update
+    }
+
+    # Compute mean, mix and max
+    foreach res $residues {
+      set rmsd_res($res) [expr $rmsd_res($res)/$count]
+      if {$res == [lindex $residues 0]} {
+	set rmsd_min $rmsd_res($res)
+	set rmsd_max $rmsd_res($res)
+      } else {
+	if {$rmsd_res($res) < $rmsd_min} {
+	  set rmsd_min $rmsd_res($res)
+	}
+	if {$rmsd_res($res) > $rmsd_max} {
+	  set rmsd_max $rmsd_res($res)
+	}
+      }
+    }
+
+    # Compute weights
+    foreach res $residues {
+      if {$byres_factor <= 0 } {
+	if {$rmsd_max == $rmsd_min} {
+	  set weight 1
+	} else { 
+	  set weight [expr ($rmsd_max-$rmsd_res($res)) / ($rmsd_max-$rmsd_min)]
+	}
+      } else {
+	set weight [expr exp(-$byres_factor*$rmsd_res($res))]
+      }
+      #puts [format "\tRes: %5d %6.3f %6.3f %6.3f %6.2f" $res $rmsd_res($res) $rmsd_min $rmsd_max $weight]
+      foreach mol $target_mol  {
+	for {set i 0} {$i < [molinfo $mol get numframes]} {incr i} {
+	  $sel_res($mol:$res) frame $i
+	  $sel_res($mol:$res) set user $weight
+	  $sel_res($mol:$res) set beta $rmsd_res($res)
+	}
+      }
+    }
+
+    if {$plot_use} {
+      set y {}
+      set x {}
+      foreach res $residues {
+	lappend y $rmsd_res($res)
+	lappend x $res
+      }
+      set color [index2rgb $iter]
+      set legend "Iter $iter"
+      $plothandle add $x $y -marker point -radius 2 -fillcolor $color -linecolor $color -nostats -legend $legend
+    }
+
+    incr iter
+  }
+
+  if {$plot_use} {
+    $plothandle replot
+  }
+  
+  #puts [array get rmsd_res]
+#  return [array get rmsd_res]
+
 }
 
 
