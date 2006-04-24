@@ -609,7 +609,7 @@ proc rmsdtt::get_ave_coor {mols sel_text} {
   foreach i $mols {
     set nframes [molinfo $i get numframes]
     if {$traj_sw && $nframes > 1} {
-      set avpos [measure avpos [atomselect $i $sel_text] 0 [expr $nframes-1] 1]
+      set avpos [measure avpos [atomselect $i $sel_text] first 0 last [expr $nframes-1] step 1]
       #puts "$i avpos: $avpos"
       if {$initialize} {
 	for {set j 0} {$j < $natoms} {incr j} {
