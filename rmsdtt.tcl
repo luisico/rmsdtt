@@ -1,5 +1,5 @@
 #
-#             RMSD Trajectory Tool v2.0
+#             RMSD Trajectory Tool v2.5
 #
 # A GUI interface for RMSD alignment and analysis of trajectories
 #
@@ -22,7 +22,7 @@
 # http://physiology.med.cornell.edu/faculty/hweinstein/vmdplugins/rmsdtt
 
 
-package provide rmsdtt 2.01
+package provide rmsdtt 2.5
 
 namespace eval ::rmsdtt:: {
   namespace export rmsdtt
@@ -239,6 +239,7 @@ proc rmsdtt::rmsdtt {} {
   variable use_byres 1
   if {$use_byres} {
     variable byres_niter 2
+    variable byres_type "exp"
     variable byres_factor 1.0
     variable byres_plot  0
     variable byres_scale "unchanged"
@@ -248,36 +249,53 @@ proc rmsdtt::rmsdtt {} {
     variable byres_style "NewRibbons"
     variable byres_frames_all 1
     variable byres_replace 1
-    
+    variable byres_save 1
+    variable byres_file "byres.dat"
+
     frame $w.byres -relief ridge -bd 2
     pack $w.byres -side top -fill x
     
-    button $w.byres.button -relief raised -bd 2 -text "FitByRes" -command [namespace current]::doByRes
-    label $w.byres.niterlabel -text "Iters:"
-    entry $w.byres.niter -width 4 -textvariable [namespace current]::byres_niter
-    label $w.byres.factorlabel -text "Factor:"
-    entry $w.byres.factor -width 4 -textvariable [namespace current]::byres_factor
-    checkbutton $w.byres.plot -text "Plot" -variable [namespace current]::byres_plot
-    
-    checkbutton $w.byres.repre -text "Rep" -variable [namespace current]::byres_repre
-    entry $w.byres.sel2 -width 10 -textvariable [namespace current]::byres_sel2
-    checkbutton $w.byres.replace -text "replace" -variable [namespace current]::byres_replace
-    menubutton $w.byres.style -text "Style" -menu $w.byres.style.menu -relief raised -direction flush
-    menu $w.byres.style.menu -tearoff no
+    frame $w.byres.up
+    pack $w.byres.up -side top -fill x
+
+    button $w.byres.up.button -relief raised -bd 2 -text "FitByRes" -command [namespace current]::doByRes
+    label $w.byres.up.niterlabel -text "Iters:"
+    entry $w.byres.up.niter -width 4 -textvariable [namespace current]::byres_niter
+    label $w.byres.up.factorlabel -text "Factor:"
+
+    menubutton $w.byres.up.type -textvariable [namespace current]::byres_type -menu $w.byres.up.type.menu -relief raised -direction flush -width 6
+    menu $w.byres.up.type.menu -tearoff no
+    foreach type [list exp expmin expcen minmax] {
+      $w.byres.up.type.menu add radiobutton -label $type -variable [namespace current]::byres_type -value $type
+    }
+
+    entry $w.byres.up.factor -width 4 -textvariable [namespace current]::byres_factor
+    checkbutton $w.byres.up.plot -text "Plot" -variable [namespace current]::byres_plot
+    checkbutton $w.byres.up.save -text "Save" -variable [namespace current]::byres_save
+    entry $w.byres.up.file -width 20 -textvariable [namespace current]::byres_file
+
+    pack $w.byres.up.button $w.byres.up.niterlabel $w.byres.up.niter $w.byres.up.factorlabel $w.byres.up.type $w.byres.up.factor $w.byres.up.plot $w.byres.up.save $w.byres.up.file -side left -anchor w
+
+    frame $w.byres.down
+    pack $w.byres.down -side top -fill x
+
+    checkbutton $w.byres.down.repre -text "Rep" -variable [namespace current]::byres_repre
+    entry $w.byres.down.sel2 -width 10 -textvariable [namespace current]::byres_sel2
+    checkbutton $w.byres.down.replace -text "replace" -variable [namespace current]::byres_replace
+    menubutton $w.byres.down.style -text "Style" -menu $w.byres.down.style.menu -relief raised -direction flush
+    menu $w.byres.down.style.menu -tearoff no
     foreach style [list Lines Bonds DynamicBonds HBonds Points VDW CPK Licorice Trace Tube Ribbons NewRibbons Cartoon NewCartoon MSMS Surf VolumeSlice Isosurface Dotted Solvent] {
-      $w.byres.style.menu add radiobutton -label $style -variable [namespace current]::byres_style -value $style
+      $w.byres.down.style.menu add radiobutton -label $style -variable [namespace current]::byres_style -value $style
     }
-    menubutton $w.byres.scale -text "Scale" -menu $w.byres.scale.menu -relief raised -direction flush
-    menu $w.byres.scale.menu -tearoff no
+    menubutton $w.byres.down.scale -text "Scale" -menu $w.byres.down.scale.menu -relief raised -direction flush
+    menu $w.byres.down.scale.menu -tearoff no
     foreach item [list unchanged RGB BGR RWB BWR RWG GWR GWB BWG BlkW WBlk] {
-      $w.byres.scale.menu add radiobutton -label $item -variable [namespace current]::byres_scale -value $item
+      $w.byres.down.scale.menu add radiobutton -label $item -variable [namespace current]::byres_scale -value $item
     }
-    checkbutton $w.byres.framesall -text "all frames" -variable [namespace current]::byres_frames_all
+    checkbutton $w.byres.down.framesall -text "all frames" -variable [namespace current]::byres_frames_all
+    checkbutton $w.byres.down.update -text "Update" -variable [namespace current]::byres_update
     
-    checkbutton $w.byres.update -text "Update" -variable [namespace current]::byres_update
-    
-    pack $w.byres.button $w.byres.niterlabel $w.byres.niter $w.byres.factorlabel $w.byres.factor $w.byres.plot -side left -anchor w
-    pack $w.byres.repre $w.byres.sel2 $w.byres.replace $w.byres.style $w.byres.scale $w.byres.framesall $w.byres.update -side left -anchor w
+    pack $w.byres.down.repre $w.byres.down.sel2 $w.byres.down.replace $w.byres.down.style $w.byres.down.scale $w.byres.down.framesall $w.byres.down.update -side left -anchor w
   }
   
   # Data
@@ -773,6 +791,7 @@ proc rmsdtt::doByRes {} {
   variable w
   variable datalist
   variable byres_niter
+  variable byres_type
   variable byres_factor
   variable byres_plot
   variable byres_scale
@@ -783,15 +802,17 @@ proc rmsdtt::doByRes {} {
   variable byres_frames_all
   variable byres_replace
   variable byres_rep
-  
+  variable byres_save
+  variable byres_file
+
   set sel1 [set_sel]
   if {$sel1 == ""} {
     showMessage "Selection is empty selection!"
     return -code return
   }
   set sel2 $byres_sel2
-  puts $sel1
-  puts $sel2
+#  puts $sel1
+#  puts $sel2
   
   set target_mol [$datalist(id) get 0 end]
   
@@ -836,7 +857,7 @@ proc rmsdtt::doByRes {} {
       #set sel_res($mol:$res)     [atomselect $mol "residue $res and $sel2"]
       set sel_res_ref($mol:$res) [atomselect $mol "residue $res and $sel1"]
       set sel_res($mol:$res)     [atomselect $mol "residue $res and $sel1"]
-      puts "$mol - $res - [$sel_res_ref($mol:$res) get index]"
+      #puts "$mol - $res - [$sel_res_ref($mol:$res) get index]"
     }
   }
   
@@ -854,6 +875,11 @@ proc rmsdtt::doByRes {} {
     }
   }
   
+  if {$byres_save} {
+    set fid [open $byres_file w]
+    puts $fid [format "%4s %7s %5s %4s %5s %7s %5s %5s" "iter" "residue" "resid" "name" "chain" "mean" "sd" "w"]
+  }
+
   if {$byres_repre} {
     # Create representation
     foreach mol $target_mol {
@@ -899,9 +925,12 @@ proc rmsdtt::doByRes {} {
   # Iterate over fitting and weighting niter times
   set iter 1
   while {$iter <= $byres_niter} {
+    puts -nonewline "Iteration: $iter "
 
     foreach res $residues {
-      set rmsd_res($res) 0
+      set rmsd_res($res) {}
+      set rmsd_mean($res) 0
+      set rmsd_sd($res) 0
     }
 
     set count 0
@@ -918,6 +947,9 @@ proc rmsdtt::doByRes {} {
 	  for {set l 0} {$l < [molinfo $mol2 get numframes]} {incr l} {
 	    if {$mol1 == $mol2 && $j == $l} {continue}
 	    
+	    if {$count % 10 == 0} {
+	      puts -nonewline "."
+	    }
 	    incr count
 	    $sel_move($mol2) frame $l
 	    $sel_current($mol2) frame $l
@@ -928,50 +960,77 @@ proc rmsdtt::doByRes {} {
 	    foreach res $residues {
 	      $sel_res($mol2:$res) frame $l
 	      set rmsd [measure rmsd $sel_res_ref($mol1:$res) $sel_res($mol2:$res)]
-	      set rmsd_res($res) [expr $rmsd_res($res) + $rmsd]
+	      lappend rmsd_res($res) $rmsd
+	      set rmsd_mean($res) [expr $rmsd_mean($res) + $rmsd]
 	    }
 	  }
 	}
       }
     }
-    
+    puts ""
+
     if {$byres_update} {
       display update
     }
 
     # Compute mean, mix and max
     foreach res $residues {
-      set rmsd_res($res) [expr $rmsd_res($res)/$count]
+      set rmsd_mean($res) [expr $rmsd_mean($res)/$count]
       if {$res == [lindex $residues 0]} {
-	set rmsd_min $rmsd_res($res)
-	set rmsd_max $rmsd_res($res)
+	set rmsd_min $rmsd_mean($res)
+	set rmsd_max $rmsd_mean($res)
       } else {
-	if {$rmsd_res($res) < $rmsd_min} {
-	  set rmsd_min $rmsd_res($res)
+	if {$rmsd_mean($res) < $rmsd_min} {
+	  set rmsd_min $rmsd_mean($res)
 	}
-	if {$rmsd_res($res) > $rmsd_max} {
-	  set rmsd_max $rmsd_res($res)
+	if {$rmsd_mean($res) > $rmsd_max} {
+	  set rmsd_max $rmsd_mean($res)
 	}
       }
     }
 
+    # Compute sd
+    #puts "[llength $rmsd_res(1)] $count"
+    foreach res $residues {
+      for {set v 0} {$v < $count} {incr v} {
+	set temp [expr [lindex $rmsd_res($res) $v] - $rmsd_mean($res)]
+	set rmsd_sd($res) [expr $rmsd_sd($res) + $temp*$temp]
+      }
+      set rmsd_sd($res) [expr sqrt($rmsd_sd($res)/($count-1))]
+    }
+
     # Compute weights
     foreach res $residues {
-      if {$byres_factor <= 0 } {
-	if {$rmsd_max == $rmsd_min} {
-	  set weight 1
-	} else { 
-	  set weight [expr ($rmsd_max-$rmsd_res($res)) / ($rmsd_max-$rmsd_min)]
+      switch $byres_type {
+	exp {
+	  set weight [expr exp(-$byres_factor*$rmsd_mean($res))]
 	}
-      } else {
-	set weight [expr exp(-$byres_factor*$rmsd_res($res))]
+	expmin {
+	  set weight [expr exp(-$byres_factor*($rmsd_mean($res) - $rmsd_min))]
+	}
+	expcen {
+	  set temp [expr $rmsd_mean($res) - $byres_factor]
+	  if {$temp >=0} {
+	    set weight [expr exp(-$temp)]
+	  } else {
+	    set weight [expr exp(.1*$temp)]
+	  }
+	}
+	minmax {
+	  if {$rmsd_max == $rmsd_min} {
+	    set weight 1
+	  } else { 
+	    set weight [expr ($rmsd_max-$rmsd_mean($res)) / ($rmsd_max-$rmsd_min)]
+	  }
+	}
       }
-      #puts [format "\tRes: %5d %6.3f %6.3f %6.3f %6.2f" $res $rmsd_res($res) $rmsd_min $rmsd_max $weight]
+
+      #puts [format "\tRes: %5d %6.3f %6.3f %6.3f %6.2f" $res $rmsd_mean($res) $rmsd_min $rmsd_max $weight]
       foreach mol $target_mol  {
 	for {set i 0} {$i < [molinfo $mol get numframes]} {incr i} {
 	  $sel_res($mol:$res) frame $i
 	  $sel_res($mol:$res) set user $weight
-	  $sel_res($mol:$res) set beta $rmsd_res($res)
+	  $sel_res($mol:$res) set beta $rmsd_mean($res)
 	}
       }
     }
@@ -980,12 +1039,19 @@ proc rmsdtt::doByRes {} {
       set y {}
       set x {}
       foreach res $residues {
-	lappend y $rmsd_res($res)
+	lappend y $rmsd_mean($res)
 	lappend x $res
       }
       set color [index2rgb $iter]
       set legend "Iter $iter"
       $plothandle add $x $y -marker point -radius 2 -fillcolor $color -linecolor $color -nostats -legend $legend
+    }
+
+    if {$byres_save} {
+      foreach res $residues {
+	set data [lindex [$sel_res([lindex $target_mol 0]:$res) get {residue resid resname chain user}] 0]
+	puts $fid [format "%4s %7d %5d %4s %5s %7.3f %5.2f %5.3f" $iter [lindex $data 0] [lindex $data 1] [lindex $data 2] [lindex $data 3] $rmsd_mean($res) $rmsd_sd($res) [lindex $data 4]]
+      }
     }
 
     incr iter
@@ -995,8 +1061,12 @@ proc rmsdtt::doByRes {} {
     $plothandle replot
   }
   
-  #puts [array get rmsd_res]
-#  return [array get rmsd_res]
+  if {$byres_save} {
+    close $fid
+  }
+  
+  #puts [array get rmsd_mean]
+#  return [array get rmsd_mean]
 
 }
 
