@@ -238,11 +238,11 @@ proc rmsdtt::rmsdtt {} {
   # ByRes
   variable use_byres 1
   if {$use_byres} {
-    variable byres_niter 2
-    variable byres_type "exp"
+    variable byres_niter 3
+    variable byres_type "expmin"
     variable byres_factor 1.0
     variable byres_plot  0
-    variable byres_scale "unchanged"
+    variable byres_scale "RWB"
     variable byres_update 0
     variable byres_repre 0
     variable byres_sel2 "all"
@@ -265,7 +265,7 @@ proc rmsdtt::rmsdtt {} {
 
     menubutton $w.byres.up.type -textvariable [namespace current]::byres_type -menu $w.byres.up.type.menu -relief raised -direction flush -width 6
     menu $w.byres.up.type.menu -tearoff no
-    foreach type [list exp expmin expcen minmax] {
+    foreach type [list exp expmin expcen minmax gaussian] {
       $w.byres.up.type.menu add radiobutton -label $type -variable [namespace current]::byres_type -value $type
     }
 
@@ -815,13 +815,34 @@ proc rmsdtt::doByRes {} {
 #  puts $sel2
   
   set target_mol [$datalist(id) get 0 end]
-  
+
+  #set divide "mol"
+  set divide 0
+  if {$divide == "mol" && [llength $target_mol] > 1} {
+    showMessage "divide by frames can only be used with one molecule\n"
+    return -code return
+  }  
+
+
+  set nsteps 0
   foreach mol $target_mol  {
     set sel_ref($mol) [atomselect $mol $sel1]
     set sel_current($mol) [atomselect $mol $sel1]
     set sel_move($mol) [atomselect $mol "all"]
+    set nframes($mol) [molinfo $mol get numframes]
+    if {$divide && $divide != "mol"} {
+      for {set i [expr $divide -1]} {$i < $nframes($mol)} {set i [expr $i + $divide]} {
+	lappend divide_frames $i
+	set last $i
+      }
+      if {$last < [expr $nframes($mol)-1]} {
+	lappend divide_frames [expr $nframes($mol)-1]
+      }
+    }
+    set nsteps [expr $nsteps + $nframes($mol)]
   }
-  
+  set nsteps [expr $nsteps*$nsteps-$nsteps]
+
   # Check number of atoms
   set message ""
   for {set i 0} {$i < [llength $target_mol]} {incr i} {
@@ -884,7 +905,7 @@ proc rmsdtt::doByRes {} {
     # Create representation
     foreach mol $target_mol {
       mol rep $byres_style
-      mol color user
+      mol color User
       mol selection $sel2
       set mol [expr $mol+0]
       set add 1
@@ -910,7 +931,7 @@ proc rmsdtt::doByRes {} {
 	mol drawframes $mol [mol repindex $mol $byres_rep($mol)] now
       }
       #      mol modstyle [mol repindex $mol $byres_rep($mol)] $mol $byres_style
-      #      mol modcolor [mol repindex $mol $byres_rep($mol)] $mol user
+      #      mol modcolor [mol repindex $mol $byres_rep($mol)] $mol User
       #      mol modselect [mol repindex $mol $byres_rep($mol)] $mol $sel2
     }
     
@@ -947,10 +968,10 @@ proc rmsdtt::doByRes {} {
 	  for {set l 0} {$l < [molinfo $mol2 get numframes]} {incr l} {
 	    if {$mol1 == $mol2 && $j == $l} {continue}
 	    
-	    if {$count % 10 == 0} {
+	    incr count
+	    if {[expr fmod($count*100.0/$nsteps, 10.0)] == 0} {
 	      puts -nonewline "."
 	    }
-	    incr count
 	    $sel_move($mol2) frame $l
 	    $sel_current($mol2) frame $l
 	    set trans_mat [measure fit $sel_current($mol2) $sel_ref($mol1) weight user]
@@ -1022,6 +1043,9 @@ proc rmsdtt::doByRes {} {
 	  } else { 
 	    set weight [expr ($rmsd_max-$rmsd_mean($res)) / ($rmsd_max-$rmsd_min)]
 	  }
+	}
+	gaussian {
+	  set weight [expr exp(-($rmsd_mean($res)*$rmsd_mean($res))/$byres_factor)]
 	}
       }
 
