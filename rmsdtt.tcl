@@ -72,6 +72,8 @@ proc rmsdtt::rmsdtt {} {
   variable stats      1
   variable datalist
   variable datatot
+  variable equiv_sw    0
+  variable equiv_byres 0
 
   # If already initialized, just turn on
   if { [winfo exists .rmsdtt] } {
@@ -131,11 +133,11 @@ proc rmsdtt::rmsdtt {} {
   frame $w.top.left -relief ridge
   pack $w.top.left -side left -fill both -expand yes
   
-  text $w.top.left.sel -height 5 -width 25 -highlightthickness 0 -selectborderwidth 0 -exportselection yes -wrap word -relief sunken -bd 1
+  text $w.top.left.sel -height 3 -width 25 -highlightthickness 0 -selectborderwidth 0 -exportselection yes -wrap word -relief sunken -bd 1
   pack $w.top.left.sel -side top -fill both -expand yes
   $w.top.left.sel insert end "protein"
 
-  frame $w.top.left.mods -relief ridge -bd 2
+  labelframe $w.top.left.mods -text "Selection modifiers" -relief ridge -bd 2
   pack $w.top.left.mods -side top -fill x
   checkbutton $w.top.left.mods.bb -text "Backbone" -variable [namespace current]::bb_only -command "[namespace current]::ctrlbb bb"
   checkbutton $w.top.left.mods.tr -text "Trace" -variable [namespace current]::trace_only -command "[namespace current]::ctrlbb trace"
@@ -150,10 +152,10 @@ proc rmsdtt::rmsdtt {} {
     set swap_use 0
   }
   if {$swap_use} {
-    frame $w.top.left.swap -relief ridge -bd 2
+    labelframe $w.top.left.swap -text "Swap atoms" -relief ridge -bd 2
     pack $w.top.left.swap -side top -fill x
     
-    checkbutton $w.top.left.swap.0 -text "Swap_atoms:" -variable [namespace current]::swap_sw -command [namespace current]::ctrlgui
+    checkbutton $w.top.left.swap.0 -text "On/Off" -variable [namespace current]::swap_sw -command [namespace current]::ctrlgui
     menubutton $w.top.left.swap.type -relief raised -direction flush -textvariable [namespace current]::swap_type -menu $w.top.left.swap.type.menu
     menu $w.top.left.swap.type.menu -tearoff no
     checkbutton $w.top.left.swap.print -text "verbose" -variable [namespace current]::swap_print
@@ -162,6 +164,14 @@ proc rmsdtt::rmsdtt {} {
     pack $w.top.left.swap.list -side right
   }
   
+  # Draw lines for equivalent atoms
+  labelframe $w.top.left.equiv -text "Draw equivalent atoms" -relief ridge -bd 2
+  pack $w.top.left.equiv -side top -fill x
+
+  checkbutton $w.top.left.equiv.0 -text "On/Off" -variable [namespace current]::equiv_sw -command [namespace current]::draw_equiv
+  checkbutton $w.top.left.equiv.byres -text "byres" -variable [namespace current]::equiv_byres
+  pack $w.top.left.equiv.0 $w.top.left.equiv.byres  -side left -anchor w
+
   # Buttons
   frame $w.top.right
   pack $w.top.right -side right
@@ -174,23 +184,22 @@ proc rmsdtt::rmsdtt {} {
   pack $w.top.right.pushfr.rmsd $w.top.right.pushfr.align -side left -fill x -expand yes
   
   # Ref mol
-  frame $w.top.right.ref -relief ridge -bd 2
+  labelframe $w.top.right.ref -text "Reference mol" -relief ridge -bd 2
   pack $w.top.right.ref -side top -fill x
 
-  label $w.top.right.ref.label -text "Ref:"
   radiobutton $w.top.right.ref.0 -text "Top" -variable [namespace current]::rmsd_base -value "top" -command [namespace current]::ctrlgui
   radiobutton $w.top.right.ref.1 -text "Average" -variable [namespace current]::rmsd_base -value "ave" -command [namespace current]::ctrlgui
   radiobutton $w.top.right.ref.2 -text "Selected" -variable [namespace current]::rmsd_base -value "selected" -command [namespace current]::ctrlgui
-  pack $w.top.right.ref.label $w.top.right.ref.0 $w.top.right.ref.1 $w.top.right.ref.2 -side left -expand yes
+  pack $w.top.right.ref.0 $w.top.right.ref.1 $w.top.right.ref.2 -side left -expand yes
 
   # Trajectory
-  frame $w.top.right.traj -relief ridge -bd 2
+  labelframe $w.top.right.traj -text "Trajectory" -relief ridge -bd 2
   pack $w.top.right.traj -side top
 
   frame $w.top.right.traj.frames -relief ridge -bd 0
   pack $w.top.right.traj.frames -side top -fill x
 
-  checkbutton $w.top.right.traj.frames.0 -text "Trajectory" -variable [namespace current]::traj_sw -command [namespace current]::ctrlgui
+  checkbutton $w.top.right.traj.frames.0 -text "On/Off" -variable [namespace current]::traj_sw -command [namespace current]::ctrlgui
   label $w.top.right.traj.frames.reflabel -text "Frame ref:"
   entry $w.top.right.traj.frames.ref -width 5 -textvariable [namespace current]::traj_ref
   checkbutton $w.top.right.traj.frames.all -text "All" -variable [namespace current]::traj_all -command [namespace current]::ctrlgui
@@ -251,8 +260,9 @@ proc rmsdtt::rmsdtt {} {
     variable byres_replace 1
     variable byres_save 1
     variable byres_file "byres.dat"
+    variable byres_cluster 0
 
-    frame $w.byres -relief ridge -bd 2
+    labelframe $w.byres -text "Iterative Fitting by residue" -relief ridge -bd 2
     pack $w.byres -side top -fill x
     
     frame $w.byres.up
@@ -296,6 +306,9 @@ proc rmsdtt::rmsdtt {} {
     checkbutton $w.byres.down.update -text "Update" -variable [namespace current]::byres_update
     
     pack $w.byres.down.repre $w.byres.down.sel2 $w.byres.down.replace $w.byres.down.style $w.byres.down.scale $w.byres.down.framesall $w.byres.down.update -side left -anchor w
+
+    checkbutton $w.byres.down.cluster -text "cluster" -variable [namespace current]::byres_cluster
+    pack $w.byres.down.cluster
   }
   
   # Data
@@ -804,6 +817,7 @@ proc rmsdtt::doByRes {} {
   variable byres_rep
   variable byres_save
   variable byres_file
+  variable byres_cluster
 
   set sel1 [set_sel]
   if {$sel1 == ""} {
@@ -830,6 +844,15 @@ proc rmsdtt::doByRes {} {
     set sel_current($mol) [atomselect $mol $sel1]
     set sel_move($mol) [atomselect $mol "all"]
     set nframes($mol) [molinfo $mol get numframes]
+    foreach mol2 $target_mol {
+      if {$mol == $mol2} {
+	for {set i 1} {$i < $nframes($mol)} {incr i} {
+	  set nsteps [expr $nsteps + $i]
+	}
+      } elseif {$mol < $mol2} {
+	set nsteps [expr $nsteps + $nframes($mol)*[molinfo $mol2 get numframes]]
+      }
+    }
     if {$divide && $divide != "mol"} {
       for {set i [expr $divide -1]} {$i < $nframes($mol)} {set i [expr $i + $divide]} {
 	lappend divide_frames $i
@@ -839,9 +862,7 @@ proc rmsdtt::doByRes {} {
 	lappend divide_frames [expr $nframes($mol)-1]
       }
     }
-    set nsteps [expr $nsteps + $nframes($mol)]
   }
-  set nsteps [expr $nsteps*$nsteps-$nsteps]
 
   # Check number of atoms
   set message ""
@@ -870,18 +891,33 @@ proc rmsdtt::doByRes {} {
   }
   
   # Make objects for residue sel
-  #set residues [lsort -unique -integer [$sel2_atoms get residue]]
-  set residues [lsort -unique -integer [[atomselect $mol $sel1] get residue]]
   foreach mol $target_mol  {
-    foreach res $residues {
-      #set sel_res_ref($mol:$res) [atomselect $mol "residue $res and $sel2"]
-      #set sel_res($mol:$res)     [atomselect $mol "residue $res and $sel2"]
-      set sel_res_ref($mol:$res) [atomselect $mol "residue $res and $sel1"]
-      set sel_res($mol:$res)     [atomselect $mol "residue $res and $sel1"]
-      #puts "$mol - $res - [$sel_res_ref($mol:$res) get index]"
+    set residues($mol) [lsort -unique -integer [[atomselect $mol $sel1] get residue]]
+    for {set i 0} {$i < [llength $residues($mol)]} {incr i} {
+      set sel_res_ref($mol:$i) [atomselect $mol "residue [lindex $residues($mol) $i] and $sel1"]
+      set sel_res($mol:$i)     [atomselect $mol "residue [lindex $residues($mol) $i] and $sel1"]
+      #puts "$mol - [lindex $residues($mol) $i] - [$sel_res_ref($mol:$i) get index]"
     }
   }
-  
+
+  # Check number of residues
+  set message ""
+  for {set i 0} {$i < [llength $target_mol]} {incr i} {
+    set mol1 [lindex $target_mol $i]
+    for {set j [expr $i+1]} {$j < [llength $target_mol]} {incr j} {
+      set mol2 [lindex $target_mol $j]
+      if {[llength $residues($mol1)] != [llength $residues($mol1)]} {
+	append message "$mol1 ([llength $residues($mol1)])\t\t$mol2 ([llength $residues($mol1)])\n"
+      }
+    }
+  }
+  if {$message != ""} {
+    set message "Number of residues selected differ for molecules:\n$message"
+    showMessage $message
+    return -code return
+  }
+  set nresidues [llength $residues([lindex $target_mol 0])]
+
   # Plot
   set plot_use 0
   if {$byres_plot} {
@@ -948,7 +984,7 @@ proc rmsdtt::doByRes {} {
   while {$iter <= $byres_niter} {
     puts -nonewline "Iteration: $iter "
 
-    foreach res $residues {
+    for {set res 0} {$res < $nresidues} {incr res} {
       set rmsd_res($res) {}
       set rmsd_mean($res) 0
       set rmsd_sd($res) 0
@@ -959,26 +995,27 @@ proc rmsdtt::doByRes {} {
       set mol1 [lindex $target_mol $i]
       for {set j 0} {$j < [molinfo $mol1 get numframes]} {incr j} {
 	$sel_ref($mol1) frame $j
-	foreach res $residues {
+	for {set res 0} {$res < $nresidues} {incr res} {
 	  $sel_res_ref($mol1:$res) frame $j
 	}
 	
 	for {set k 0} {$k < [llength $target_mol]} {incr k} {
 	  set mol2 [lindex $target_mol $k]
 	  for {set l 0} {$l < [molinfo $mol2 get numframes]} {incr l} {
-	    if {$mol1 == $mol2 && $j == $l} {continue}
+	    #if {$i == $j && $k == $l} {continue}
+	    if {$i == $k && $j >= $l   ||   $i > $k} {continue}
 	    
 	    incr count
-	    if {[expr fmod($count*100.0/$nsteps, 10.0)] == 0} {
-	      puts -nonewline "."
-	    }
+	    #if {[expr fmod($count*100.0/$nsteps, 10.0)] == 0} {
+	    #  puts -nonewline "."
+	    #}
 	    $sel_move($mol2) frame $l
 	    $sel_current($mol2) frame $l
 	    set trans_mat [measure fit $sel_current($mol2) $sel_ref($mol1) weight user]
 	    $sel_move($mol2) move $trans_mat
 	    
 	    # Compute rmsd for each residue
-	    foreach res $residues {
+	    for {set res 0} {$res < $nresidues} {incr res} {
 	      $sel_res($mol2:$res) frame $l
 	      set rmsd [measure rmsd $sel_res_ref($mol1:$res) $sel_res($mol2:$res)]
 	      lappend rmsd_res($res) $rmsd
@@ -994,10 +1031,11 @@ proc rmsdtt::doByRes {} {
       display update
     }
 
+    
     # Compute mean, mix and max
-    foreach res $residues {
+    for {set res 0} {$res < $nresidues} {incr res} {
       set rmsd_mean($res) [expr $rmsd_mean($res)/$count]
-      if {$res == [lindex $residues 0]} {
+      if {$res == 0} {
 	set rmsd_min $rmsd_mean($res)
 	set rmsd_max $rmsd_mean($res)
       } else {
@@ -1012,7 +1050,7 @@ proc rmsdtt::doByRes {} {
 
     # Compute sd
     #puts "[llength $rmsd_res(1)] $count"
-    foreach res $residues {
+    for {set res 0} {$res < $nresidues} {incr res} {
       for {set v 0} {$v < $count} {incr v} {
 	set temp [expr [lindex $rmsd_res($res) $v] - $rmsd_mean($res)]
 	set rmsd_sd($res) [expr $rmsd_sd($res) + $temp*$temp]
@@ -1021,7 +1059,7 @@ proc rmsdtt::doByRes {} {
     }
 
     # Compute weights
-    foreach res $residues {
+    for {set res 0} {$res < $nresidues} {incr res} {
       switch $byres_type {
 	exp {
 	  set weight [expr exp(-$byres_factor*$rmsd_mean($res))]
@@ -1062,7 +1100,7 @@ proc rmsdtt::doByRes {} {
     if {$plot_use} {
       set y {}
       set x {}
-      foreach res $residues {
+      for {set res 0} {$res < $nresidues} {incr res} {
 	lappend y $rmsd_mean($res)
 	lappend x $res
       }
@@ -1072,7 +1110,7 @@ proc rmsdtt::doByRes {} {
     }
 
     if {$byres_save} {
-      foreach res $residues {
+      for {set res 0} {$res < $nresidues} {incr res} {
 	set data [lindex [$sel_res([lindex $target_mol 0]:$res) get {residue resid resname chain user}] 0]
 	puts $fid [format "%4s %7d %5d %4s %5s %7.3f %5.2f %5.3f" $iter [lindex $data 0] [lindex $data 1] [lindex $data 2] [lindex $data 3] $rmsd_mean($res) $rmsd_sd($res) [lindex $data 4]]
       }
@@ -1088,12 +1126,132 @@ proc rmsdtt::doByRes {} {
   if {$byres_save} {
     close $fid
   }
+
+
+  # clustering
+  if {$byres_cluster} {
+    puts "Clustering"
+    set fid1 [open "$byres_file.cluster1" w]
+    set fid2 [open "$byres_file.cluster2" w]
+    puts -nonewline $fid2 [format "%6s %6s" "str1" "str2"]
+    for {set res 0} {$res < $nresidues} {incr res} {
+      puts -nonewline $fid2 [format " %7d" [lindex $residues([lindex $target_mol 0]) $res]]
+    }
+    puts $fid2 ""
+    
+    for {set i 0} {$i < [llength $target_mol]} {incr i} {
+      set mol1 [lindex $target_mol $i]
+      for {set j 0} {$j < [molinfo $mol1 get numframes]} {incr j} {
+	$sel_ref($mol1) frame $j
+	for {set res 0} {$res < $nresidues} {incr res} {
+	  $sel_res_ref($mol1:$res) frame $j
+	}
+	
+	for {set k 0} {$k < [llength $target_mol]} {incr k} {
+	  set mol2 [lindex $target_mol $k]
+	  for {set l 0} {$l < [molinfo $mol2 get numframes]} {incr l} {
+	    #if {$i == $j && $k == $l} {continue}
+	    #if {$i == $k && $j >= $l   ||   $i > $k} {
+	    #  puts $fid [format "%2d:%-3d %2d:%-3d NA NA" $i $j $k $l]
+	    #  continue
+	    #}
+	    $sel_current($mol2) frame $l
+	    
+	    set cluster_rms  [measure rmsd $sel_current($mol2) $sel_ref($mol1)]
+	    set cluster_rmsw [measure rmsd $sel_current($mol2) $sel_ref($mol1) weight user]
+
+	    puts -nonewline $fid2 [format "%2d:%-3d %2d:%-3d" $i $j $k $l]
+	    set cluster_byres 0.0
+	    set weight_tot 0.0
+	    for {set res 0} {$res < $nresidues} {incr res} {
+	      $sel_res($mol2:$res) frame $l
+	      set rmsd [measure rmsd $sel_res_ref($mol1:$res) $sel_res($mol2:$res)]
+	      set weight [lindex [$sel_res($mol1:$res) get user] 0]
+	      set weight_tot [expr $weight_tot + $weight]
+	      set cluster_byres [expr $cluster_byres + $weight*$rmsd]
+	      puts -nonewline $fid2 [format " %7.3f" $rmsd]
+	    }
+	    set cluster_byres [expr $cluster_byres / $weight_tot]
+	    puts $fid2 ""
+
+	    puts $fid1 [format "%2d:%-3d %2d:%-3d %7.3f %7.3f %7.3f" $i $j $k $l $cluster_rms $cluster_rmsw $cluster_byres]
+
+	  }
+	}
+      }
+    }
+    close $fid1
+    close $fid2
+
+  }
+
   
   #puts [array get rmsd_mean]
 #  return [array get rmsd_mean]
 
 }
 
+proc rmsdtt::draw_equiv {{byres 0}} {
+  variable equiv_sw
+  variable equiv_byres
+  variable datalist
+
+  set ref [molinfo top]
+
+  graphics $ref delete all
+
+  if {!$equiv_sw} {
+    return
+  }
+  
+  if {$equiv_byres} {
+    set byres 1
+  }
+
+  set target_mol [$datalist(id) get 0 end]
+  set sel [set_sel]
+
+  graphics $ref color 4
+  set equiv_lines {}
+
+  for {set i 0} {$i < [llength $target_mol]} {incr i} {
+    set mol1 [lindex $target_mol $i]
+    if {$equiv_byres} {
+      set coor1 {}
+      set residues [lsort -unique -integer [[atomselect $mol1 $sel] get residue]]
+      for {set r 0} {$r < [llength $residues]} {incr r} {
+	foreach c [[atomselect $mol1 "residue [lindex $residues $r] and $sel"] get {x y z}] {
+	  lappend coor1 $c
+	}
+      }
+    } else {
+      set coor1 [[atomselect $mol1 $sel] get {x y z}]
+    }
+    
+    for {set j [expr $i+1]} {$j < [llength $target_mol]} {incr j} {
+      set mol2 [lindex $target_mol $j]
+      if {$equiv_byres} {
+	set coor2 {}
+	set residues [lsort -unique -integer [[atomselect $mol2 $sel] get residue]]
+	for {set r 0} {$r < [llength $residues]} {incr r} {
+	  foreach c [[atomselect $mol2 "residue [lindex $residues $r] and $sel"] get {x y z}] {
+	    lappend coor2 $c
+	  }
+	}
+      } else {
+	set coor2 [[atomselect $mol2 $sel] get {x y z}]
+      }
+      if {[llength $coor1] != [llength $coor2]} {
+	puts "mol$mol1 and mol$mol2 have different number of atoms"
+	continue
+      }
+      for {set c 0} {$c < [llength $coor1]} {incr c} {
+	lappend equiv_lines [graphics $ref line [lindex $coor1 $c] [lindex $coor2 $c] width 1 style dashed]
+      }
+    }
+  }
+}
+  
 
 proc rmsdtt::align {sel1 frame1 sel2} {
   $sel1 frame $frame1
@@ -1650,6 +1808,7 @@ proc rmsdtt::ctrlgui {} {
   variable skip_sw
   variable swap_sw
   variable swap_use
+  variable equiv_sw
   variable noh
 
   if {$traj_sw} {
@@ -1745,6 +1904,7 @@ proc rmsdtt::ctrlgui {} {
     }
     [namespace current]::update_swap_types
   }
+
 }
 
 
