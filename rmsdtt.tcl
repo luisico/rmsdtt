@@ -895,6 +895,7 @@ proc rmsdtt::doByRes {} {
       return
     }
   }
+
   if {$fast} {
     puts -nonewline "Trying fast algorithm...   "
     if [catch { set ret [measure rmsd $sel_ref([lindex $target_mol 0]) $sel_ref([lindex $target_mol 0]) byatom] } msg] {
@@ -907,6 +908,14 @@ proc rmsdtt::doByRes {} {
     }
     if {$fast} {
       puts "OK"
+      
+      # Delete residue objects
+      foreach mol $target_mol  {
+	for {set i 0} {$i < [llength $residues($mol)]} {incr i} {
+	  $sel_res_ref($mol:$i) delete
+	  $sel_res($mol:$i) delete
+	}
+      }
     }
   }
 
@@ -994,14 +1003,13 @@ proc rmsdtt::doByRes {} {
   # Initizalize rmsd by residue and weights
   if {$fast} {
     ::blt::vector create zeros
-    ::blt::vector create weights
-    ::blt::vector create temp
     zeros set 0.0
-    weights set 1.0
     for {set res 1} {$res < $nresidues} {incr res} {
       zeros append 0.0
-      weights append 1.0
     }
+    ::blt::vector create weights
+    weights expr {zeros + 1.0}
+    ::blt::vector create temp
   } else {
     for {set res 0} {$res < $nresidues} {incr res} {
       lappend rmsd_mean 0.0
@@ -1032,8 +1040,10 @@ proc rmsdtt::doByRes {} {
       set mol1 [lindex $target_mol $i]
       for {set j 0} {$j < $nframes($mol1)} {incr j} {
 	$sel_ref($mol1) frame $j
-	for {set res 0} {$res < $nresidues} {incr res} {
-	  $sel_res_ref($mol1:$res) frame $j
+	if {!$fast} {
+	  for {set res 0} {$res < $nresidues} {incr res} {
+	    $sel_res_ref($mol1:$res) frame $j
+	  }
 	}
 	
 	for {set k 0} {$k < $nmols} {incr k} {
@@ -1064,28 +1074,13 @@ proc rmsdtt::doByRes {} {
     }
     puts ""
 
-    # Compute mean, mix and max
     if {$fast} {
+      # Compute mean, mix and max
       rmsd_mean set [rmsd_mean / $count]
       set rmsd_min $rmsd_mean(min)
       set rmsd_max $rmsd_mean(max)
-    } else {
-      set rmsd_min [expr [lindex $rmsd_mean 0] / $count]
-      set rmsd_max $rmsd_min
-      for {set res 0} {$res < [llength $rmsd_mean]} {incr res} {
-	lset rmsd_mean $res [expr [lindex $rmsd_mean $res] / $count]
-	if {[lindex $rmsd_mean $res] < $rmsd_min} {
-	  set rmsd_min [lindex $rmsd_mean $res]
-	  continue
-	}
-	if {[lindex $rmsd_mean $res] > $rmsd_max} {
-	  set rmsd_max [lindex $rmsd_mean $res]
-	}
-      }
-    }
 
-    # Compute weights, plot and save
-    if {$fast} {
+      # Compute weights
       switch $byres_type {
 	exp {
 	  weights expr { exp(-$byres_factor * rmsd_mean) }
@@ -1105,6 +1100,7 @@ proc rmsdtt::doByRes {} {
 	}
       }
       
+      # Update display
       if {$byres_update} {
 	foreach mol $target_mol  {
 	  for {set i 0} {$i < [molinfo $mol get numframes]} {incr i} {
@@ -1114,7 +1110,8 @@ proc rmsdtt::doByRes {} {
 	  }
 	}
       }
-
+      
+      # Plot
       if {$plot_use} {
 	set x [::blt::vector seq 0 $nresidues]
 	set y [rmsd_mean range 0 end]
@@ -1123,15 +1120,31 @@ proc rmsdtt::doByRes {} {
 	$plothandle add $x $y -marker point -radius 2 -fillcolor $color -linecolor $color -nostats -legend $legend
       }
       
+      # Save
       if {$byres_save} {
+	set data [$sel_ref([lindex $target_mol 0]) get {residue resid resname chain}]
 	for {set res 0} {$res < $nresidues} {incr res} {
-	  set data [lindex [$sel_res([lindex $target_mol 0]:$res) get {residue resid resname chain}] 0]
-	  puts $fid [format "%4s %7d %5d %4s %5s %7.3f %5.3f" $iter [lindex $data 0] [lindex $data 1] [lindex $data 2] [lindex $data 3] [rmsd_mean index $res] [weights index $res]]
+	  lassign [lindex $data $res] d_residue d_resid d_resname d_chain
+	  puts $fid [format "%4s %7d %5d %4s %5s %7.3f %5.3f" $iter $d_residue $d_resid $d_resname $d_chain [rmsd_mean index $res] [weights index $res]]
 	}
       }
-      
 
     } else {
+    # Compute mean, mix and max
+      set rmsd_min [expr [lindex $rmsd_mean 0] / $count]
+      set rmsd_max $rmsd_min
+      for {set res 0} {$res < [llength $rmsd_mean]} {incr res} {
+	lset rmsd_mean $res [expr [lindex $rmsd_mean $res] / $count]
+	if {[lindex $rmsd_mean $res] < $rmsd_min} {
+	  set rmsd_min [lindex $rmsd_mean $res]
+	  continue
+	}
+	if {[lindex $rmsd_mean $res] > $rmsd_max} {
+	  set rmsd_max [lindex $rmsd_mean $res]
+	}
+      }
+
+      # Compute weights
       for {set res 0} {$res < $nresidues} {incr res} {
 	set r [lindex $rmsd_mean $res]
 	switch $byres_type {
@@ -1152,8 +1165,9 @@ proc rmsdtt::doByRes {} {
 	    set weight [expr exp(-($r*$r)/$byres_factor)]
 	  }
 	}
-	
 	#puts [format "\tRes: %5d %6.3f %6.3f %6.3f %6.2f" $res $rmsd_mean($res) $rmsd_min $rmsd_max $weight]
+
+	# Update
 	foreach mol $target_mol  {
 	  for {set i 0} {$i < [molinfo $mol get numframes]} {incr i} {
 	    $sel_res($mol:$res) frame $i
@@ -1162,6 +1176,7 @@ proc rmsdtt::doByRes {} {
 	  }
 	}
 	
+	# Plot
 	if {$plot_use} {
 	  lappend x $res
 	  lappend y $r
@@ -1170,6 +1185,7 @@ proc rmsdtt::doByRes {} {
 	  $plothandle add $x $y -marker point -radius 2 -fillcolor $color -linecolor $color -nostats -legend $legend
 	}
 	
+	# Save
 	if {$byres_save} {
 	  set data [lindex [$sel_res([lindex $target_mol 0]:$res) get {residue resid resname chain user}] 0]
 	  puts $fid [format "%4s %7d %5d %4s %5s %7.3f %5.3f" $iter [lindex $data 0] [lindex $data 1] [lindex $data 2] [lindex $data 3] $r [lindex $data 4]]
@@ -1180,13 +1196,7 @@ proc rmsdtt::doByRes {} {
     incr iter
   }
 
-  if {$byres_update} {display update}
-    
-  if {$plot_use} {$plothandle replot}
-  
-  if {$byres_save} {close $fid}
-
-  # Final update of weights and rmsd
+  # Update atom properties
   if {$fast} {
     foreach mol $target_mol  {
       for {set i 0} {$i < $nframes($mol)} {incr i} {
@@ -1196,6 +1206,12 @@ proc rmsdtt::doByRes {} {
       }
     }
   }
+  if {$byres_update} {display update}
+    
+  if {$plot_use} {$plothandle replot}
+  
+  if {$byres_save} {close $fid}
+
 
   # clustering
   if {$byres_cluster} {
@@ -1209,7 +1225,7 @@ proc rmsdtt::doByRes {} {
     puts $fid2 ""
     
     if {$fast} {
-      set weight_sum [::blt::vector expr {sum(weights)}]
+      set weight_sum [::blt::vector expr { sum(weights) }]
     }
     
     for {set i 0} {$i < $nmols} {incr i} {
@@ -1235,6 +1251,7 @@ proc rmsdtt::doByRes {} {
 	      puts $fid2 $cluster_byres
 	      temp set $cluster_byres
 	      set cluster_byres [expr [::blt::vector expr {sum(temp)}] / $weight_sum ]
+
 	    } else {
 	      set cluster_rmsw [measure rmsd $sel_current($mol2) $sel_ref($mol1) weight user]
 	      set cluster_byres 0.0
