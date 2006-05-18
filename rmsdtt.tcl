@@ -275,7 +275,7 @@ proc rmsdtt::rmsdtt {} {
 
     menubutton $w.byres.up.type -textvariable [namespace current]::byres_type -menu $w.byres.up.type.menu -relief raised -direction flush -width 6
     menu $w.byres.up.type.menu -tearoff no
-    foreach type [list exp expmin expcen minmax gaussian] {
+    foreach type [list exp expmin minmax gaussian] {
       $w.byres.up.type.menu add radiobutton -label $type -variable [namespace current]::byres_type -value $type
     }
 
@@ -856,6 +856,8 @@ proc rmsdtt::doByRes {} {
   }  
 
 
+  set fast 1
+
   # Initialize objects and weights
   foreach mol $target_mol  {
     set nframes($mol) [molinfo $mol get numframes]
@@ -870,6 +872,9 @@ proc rmsdtt::doByRes {} {
     for {set i 0} {$i < [llength $residues($mol)]} {incr i} {
       set sel_res_ref($mol:$i) [atomselect $mol "residue [lindex $residues($mol) $i] and $sel1"]
       set sel_res($mol:$i)     [atomselect $mol "residue [lindex $residues($mol) $i] and $sel1"]
+      if {[$sel_res_ref($mol:$i) num] > 1} {
+	set fast 0
+      }
       #puts "$mol - [lindex $residues($mol) $i] - [$sel_res_ref($mol:$i) get index]"
     }
 
@@ -888,6 +893,13 @@ proc rmsdtt::doByRes {} {
       }
       puts $divide_frames
       return
+    }
+  }
+  if {$fast} {
+    puts "Using modified version of VMD!"
+    if [catch {package require BLT} msg] {
+      showMessage "Package BLT is not available"
+      set fast 0
     }
   }
 
@@ -971,14 +983,38 @@ proc rmsdtt::doByRes {} {
 
   if {$byres_update} {display update}
 
+
+  # Initizalize rmsd by residue
+  if {$fast} {
+    ::blt::vector create zeros
+    zeros set 0.0
+    for {set res 1} {$res < $nresidues} {incr res} {
+      zeros append 0.0
+    }
+    ::blt::vector create temp
+  } else {
+    for {set res 0} {$res < $nresidues} {incr res} {
+      lappend rmsd_mean 0.0
+    }
+  }
+
   # Iterate over fitting and weighting niter times
   set iter 1
   while {$iter <= $byres_niter} {
     puts -nonewline "Iteration: $iter "
 
     # Reset rmsd by residue
-    for {set res 0} {$res < $nresidues} {incr res} {
-      set rmsd_mean($res) 0
+    if {$fast} {
+      zeros dup rmsd_mean
+    } else {
+      for {set res 0} {$res < $nresidues} {incr res} {
+	lset rmsd_mean $res 0.0
+      }
+    }
+    
+    if {$plot_use} {
+      set y {}
+      set x {}
     }
 
     set count 0
@@ -1001,9 +1037,16 @@ proc rmsdtt::doByRes {} {
 	    $sel_move($mol2) move [measure fit $sel_current($mol2) $sel_ref($mol1) weight user]
 	    
 	    # Compute rmsd for each residue
-	    for {set res 0} {$res < $nresidues} {incr res} {
-	      $sel_res($mol2:$res) frame $l
-	      set rmsd_mean($res) [expr $rmsd_mean($res) + [measure rmsd $sel_res_ref($mol1:$res) $sel_res($mol2:$res)]]
+	    if {$fast} {
+	      lassign [measure rmsd $sel_ref($mol1) $sel_current($mol2) byatom] global_rmsd byres_rmsd
+	      temp set $byres_rmsd
+	      rmsd_mean set [rmsd_mean + temp]
+
+	    } else {
+	      for {set res 0} {$res < $nresidues} {incr res} {
+		$sel_res($mol2:$res) frame $l
+		lset rmsd_mean $res [expr [lindex $rmsd_mean $res] + [measure rmsd $sel_res_ref($mol1:$res) $sel_res($mol2:$res)]]
+	      }
 	    }
 	  }
 	}
@@ -1015,74 +1058,113 @@ proc rmsdtt::doByRes {} {
 
     
     # Compute mean, mix and max
-    set rmsd_min [expr $rmsd_mean(0)/$count]
-    set rmsd_max $rmsd_min
-    for {set res 0} {$res < $nresidues} {incr res} {
-      set rmsd_mean($res) [expr $rmsd_mean($res)/$count]
-      if {$rmsd_mean($res) < $rmsd_min} {
-	set rmsd_min $rmsd_mean($res)
-	continue
-      }
-      if {$rmsd_mean($res) > $rmsd_max} {
-	set rmsd_max $rmsd_mean($res)
+    if {$fast} {
+      rmsd_mean set [rmsd_mean / $count]
+      set rmsd_min $rmsd_mean(min)
+      set rmsd_max $rmsd_mean(max)
+    } else {
+      set rmsd_min [expr [lindex $rmsd_mean 0] / $count]
+      set rmsd_max $rmsd_min
+      for {set res 0} {$res < [llength $rmsd_mean]} {incr res} {
+	lset rmsd_mean $res [expr [lindex $rmsd_mean $res] / $count]
+	if {[lindex $rmsd_mean $res] < $rmsd_min} {
+	  set rmsd_min [lindex $rmsd_mean $res]
+	  continue
+	}
+	if {[lindex $rmsd_mean $res] > $rmsd_max} {
+	  set rmsd_max [lindex $rmsd_mean $res]
+	}
       }
     }
 
-    # Compute weights
-    for {set res 0} {$res < $nresidues} {incr res} {
+    # Compute weights, plot and save
+    if {$fast} {
       switch $byres_type {
 	exp {
-	  set weight [expr exp(-$byres_factor*$rmsd_mean($res))]
+	  set weight [::blt::vector expr {exp(-$byres_factor * rmsd_mean)}]
 	}
 	expmin {
-	  set weight [expr exp(-$byres_factor*($rmsd_mean($res) - $rmsd_min))]
-	}
-	expcen {
-	  set temp [expr $rmsd_mean($res) - $byres_factor]
-	  if {$temp >=0} {
-	    set weight [expr exp(-$temp)]
-	  } else {
-	    set weight [expr exp(.1*$temp)]
-	  }
+	  set weight [::blt::vector expr {exp(-$byres_factor*( rmsd_mean - $rmsd_min))}]
 	}
 	minmax {
 	  if {$rmsd_max == $rmsd_min} {
 	    set weight 1
 	  } else { 
-	    set weight [expr ($rmsd_max-$rmsd_mean($res)) / ($rmsd_max-$rmsd_min)]
+	    set weight [::blt::vector {expr ($rmsd_max- rmsd_mean) / ($rmsd_max-$rmsd_min)}]
 	  }
 	}
 	gaussian {
-	  set weight [expr exp(-($rmsd_mean($res)*$rmsd_mean($res))/$byres_factor)]
+	  set weight [::blt::vector {expr exp(-( rmsd_mean * rmsd_mean )/$byres_factor)}]
 	}
       }
-
-      #puts [format "\tRes: %5d %6.3f %6.3f %6.3f %6.2f" $res $rmsd_mean($res) $rmsd_min $rmsd_max $weight]
+      
       foreach mol $target_mol  {
 	for {set i 0} {$i < [molinfo $mol get numframes]} {incr i} {
-	  $sel_res($mol:$res) frame $i
-	  $sel_res($mol:$res) set user $weight
-	  $sel_res($mol:$res) set beta $rmsd_mean($res)
+	  $sel_ref($mol) frame $i
+	  $sel_ref($mol) set user $weight
+	  $sel_ref($mol) set beta [rmsd_mean range 0 end]
 	}
       }
-    }
 
-    if {$plot_use} {
-      set y {}
-      set x {}
-      for {set res 0} {$res < $nresidues} {incr res} {
-	lappend y $rmsd_mean($res)
-	lappend x $res
+      if {$plot_use} {
+	set x [::blt::vector seq 0 $nresidues]
+	set y [rmsd_mean range 0 end]
+	set color [index2rgb $iter]
+	set legend "Iter $iter"
+	$plothandle add $x $y -marker point -radius 2 -fillcolor $color -linecolor $color -nostats -legend $legend
       }
-      set color [index2rgb $iter]
-      set legend "Iter $iter"
-      $plothandle add $x $y -marker point -radius 2 -fillcolor $color -linecolor $color -nostats -legend $legend
-    }
+      
+      if {$byres_save} {
+	for {set res 0} {$res < $nresidues} {incr res} {
+	  set data [lindex [$sel_res([lindex $target_mol 0]:$res) get {residue resid resname chain}] 0]
+	  puts $fid [format "%4s %7d %5d %4s %5s %7.3f %5.3f" $iter [lindex $data 0] [lindex $data 1] [lindex $data 2] [lindex $data 3] [rmsd_mean index $res] [lindex $weight $res]]
+	}
+      }
+      
 
-    if {$byres_save} {
+    } else {
       for {set res 0} {$res < $nresidues} {incr res} {
-	set data [lindex [$sel_res([lindex $target_mol 0]:$res) get {residue resid resname chain user}] 0]
-	puts $fid [format "%4s %7d %5d %4s %5s %7.3f %5.3f" $iter [lindex $data 0] [lindex $data 1] [lindex $data 2] [lindex $data 3] $rmsd_mean($res) [lindex $data 4]]
+	set r [lindex $rmsd_mean $res]
+	switch $byres_type {
+	  exp {
+	    set weight [expr exp(-$byres_factor*$r)]
+	  }
+	  expmin {
+	    set weight [expr exp(-$byres_factor*($r - $rmsd_min))]
+	  }
+	  minmax {
+	    if {$rmsd_max == $rmsd_min} {
+	      set weight 1
+	    } else { 
+	      set weight [expr ($rmsd_max-$r) / ($rmsd_max-$rmsd_min)]
+	    }
+	  }
+	  gaussian {
+	    set weight [expr exp(-($r*$r)/$byres_factor)]
+	  }
+	}
+	
+	#puts [format "\tRes: %5d %6.3f %6.3f %6.3f %6.2f" $res $rmsd_mean($res) $rmsd_min $rmsd_max $weight]
+	foreach mol $target_mol  {
+	  for {set i 0} {$i < [molinfo $mol get numframes]} {incr i} {
+	    $sel_res($mol:$res) frame $i
+	    $sel_res($mol:$res) set user $weight
+	    $sel_res($mol:$res) set beta $r
+	  }
+	}
+	
+	if {$plot_use} {
+	  lappend x $res
+	  lappend y $r
+	  set color [index2rgb $iter]
+	  set legend "Iter $iter"
+	  $plothandle add $x $y -marker point -radius 2 -fillcolor $color -linecolor $color -nostats -legend $legend
+	}
+	
+	if {$byres_save} {
+	  set data [lindex [$sel_res([lindex $target_mol 0]:$res) get {residue resid resname chain user}] 0]
+	  puts $fid [format "%4s %7d %5d %4s %5s %7.3f %5.3f" $iter [lindex $data 0] [lindex $data 1] [lindex $data 2] [lindex $data 3] $r [lindex $data 4]]
+	}
       }
     }
 
