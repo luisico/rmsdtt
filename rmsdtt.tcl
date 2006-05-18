@@ -829,49 +829,16 @@ proc rmsdtt::doByRes {} {
 #  puts $sel2
   
   set target_mol [$datalist(id) get 0 end]
-
-  #set divide "mol"
-  set divide 0
-  if {$divide == "mol" && [llength $target_mol] > 1} {
-    showMessage "divide by frames can only be used with one molecule\n"
-    return -code return
-  }  
-
-
-  set nsteps 0
-  foreach mol $target_mol  {
-    set sel_ref($mol) [atomselect $mol $sel1]
-    set sel_current($mol) [atomselect $mol $sel1]
-    set sel_move($mol) [atomselect $mol "all"]
-    set nframes($mol) [molinfo $mol get numframes]
-    foreach mol2 $target_mol {
-      if {$mol == $mol2} {
-	for {set i 1} {$i < $nframes($mol)} {incr i} {
-	  set nsteps [expr $nsteps + $i]
-	}
-      } elseif {$mol < $mol2} {
-	set nsteps [expr $nsteps + $nframes($mol)*[molinfo $mol2 get numframes]]
-      }
-    }
-    if {$divide && $divide != "mol"} {
-      for {set i [expr $divide -1]} {$i < $nframes($mol)} {set i [expr $i + $divide]} {
-	lappend divide_frames $i
-	set last $i
-      }
-      if {$last < [expr $nframes($mol)-1]} {
-	lappend divide_frames [expr $nframes($mol)-1]
-      }
-    }
-  }
+  set nmols [llength $target_mol]
 
   # Check number of atoms
   set message ""
-  for {set i 0} {$i < [llength $target_mol]} {incr i} {
+  for {set i 0} {$i < $nmols} {incr i} {
     set mol1 [lindex $target_mol $i]
-    for {set j [expr $i+1]} {$j < [llength $target_mol]} {incr j} {
+    for {set j [expr $i+1]} {$j < $nmols} {incr j} {
       set mol2 [lindex $target_mol $j]
-      if {[$sel_ref($mol1) num] != [$sel_ref($mol2) num]} {
-	append message "$mol1 ([$sel_ref($mol1) num])\t\t$mol2 ([$sel_ref($mol2) num])\n"
+      if {[[atomselect $mol1 $sel1] num] != [[atomselect $mol2 $sel1] num]} {
+	append message "$mol1 ([[atomselect $mol1 $sel1] num])\t\t$mol2 ([[atomselect $mol2 $sel1] num])\n"
       }
     }
   }
@@ -881,30 +848,54 @@ proc rmsdtt::doByRes {} {
     return -code return
   }
   
-  # Set the user field of all frames = 1 for use in initial weighting scheme
+
+  set divide 0
+  if {$divide > 0 && $nmols > 1} {
+    showMessage "divide by frames can only be used with one molecule\n"
+    return -code return
+  }  
+
+
+  # Initialize objects and weights
   foreach mol $target_mol  {
-    set sel2_atoms [atomselect $mol $sel2]
-    for {set i 0} {$i < [molinfo $mol get numframes]} {incr i} {
-      $sel2_atoms frame $i
-      $sel2_atoms set user 1
-    }
-  }
-  
-  # Make objects for residue sel
-  foreach mol $target_mol  {
+    set nframes($mol) [molinfo $mol get numframes]
+
+    # Make objects for molecule selections
+    set sel_ref($mol) [atomselect $mol $sel1]
+    set sel_current($mol) [atomselect $mol $sel1]
+    set sel_move($mol) [atomselect $mol "all"]
+
+    # Make objects for residue sel
     set residues($mol) [lsort -unique -integer [[atomselect $mol $sel1] get residue]]
     for {set i 0} {$i < [llength $residues($mol)]} {incr i} {
       set sel_res_ref($mol:$i) [atomselect $mol "residue [lindex $residues($mol) $i] and $sel1"]
       set sel_res($mol:$i)     [atomselect $mol "residue [lindex $residues($mol) $i] and $sel1"]
       #puts "$mol - [lindex $residues($mol) $i] - [$sel_res_ref($mol:$i) get index]"
     }
+
+    # Set the user field of all frames = 1 for use in initial weighting scheme
+    set sel2_atoms [atomselect $mol $sel2]
+    for {set i 0} {$i < $nframes($mol)} {incr i} {
+      $sel2_atoms frame $i
+      $sel2_atoms set user 1
+    }
+
+    # Division of frames in contigous windows
+    if {$divide > 0} {
+      set divide_frames 0
+      for {set i $divide} {$i < $nframes($mol)} {set i [expr $i + $divide]} {
+	lappend divide_frames $i
+      }
+      puts $divide_frames
+      return
+    }
   }
 
   # Check number of residues
   set message ""
-  for {set i 0} {$i < [llength $target_mol]} {incr i} {
+  for {set i 0} {$i < $nmols} {incr i} {
     set mol1 [lindex $target_mol $i]
-    for {set j [expr $i+1]} {$j < [llength $target_mol]} {incr j} {
+    for {set j [expr $i+1]} {$j < $nmols} {incr j} {
       set mol2 [lindex $target_mol $j]
       if {[llength $residues($mol1)] != [llength $residues($mol1)]} {
 	append message "$mol1 ([llength $residues($mol1)])\t\t$mol2 ([llength $residues($mol1)])\n"
@@ -918,7 +909,7 @@ proc rmsdtt::doByRes {} {
   }
   set nresidues [llength $residues([lindex $target_mol 0])]
 
-  # Plot
+  # Initialize plot
   set plot_use 0
   if {$byres_plot} {
     if [catch {package require multiplot} msg] {
@@ -932,13 +923,14 @@ proc rmsdtt::doByRes {} {
     }
   }
   
+  # Header for file
   if {$byres_save} {
     set fid [open $byres_file w]
-    puts $fid [format "%4s %7s %5s %4s %5s %7s %5s %5s" "iter" "residue" "resid" "name" "chain" "mean" "sd" "w"]
+    puts $fid [format "%4s %7s %5s %4s %5s %7s %5s" "iter" "residue" "resid" "name" "chain" "mean" "w"]
   }
 
+  # Create representation
   if {$byres_repre} {
-    # Create representation
     foreach mol $target_mol {
       mol rep $byres_style
       mol color User
@@ -984,42 +976,34 @@ proc rmsdtt::doByRes {} {
   while {$iter <= $byres_niter} {
     puts -nonewline "Iteration: $iter "
 
+    # Reset rmsd by residue
     for {set res 0} {$res < $nresidues} {incr res} {
-      set rmsd_res($res) {}
       set rmsd_mean($res) 0
-      set rmsd_sd($res) 0
     }
 
     set count 0
-    for {set i 0} {$i < [llength $target_mol]} {incr i} {
+    for {set i 0} {$i < $nmols} {incr i} {
       set mol1 [lindex $target_mol $i]
-      for {set j 0} {$j < [molinfo $mol1 get numframes]} {incr j} {
+      for {set j 0} {$j < $nframes($mol1)} {incr j} {
 	$sel_ref($mol1) frame $j
 	for {set res 0} {$res < $nresidues} {incr res} {
 	  $sel_res_ref($mol1:$res) frame $j
 	}
 	
-	for {set k 0} {$k < [llength $target_mol]} {incr k} {
+	for {set k 0} {$k < $nmols} {incr k} {
 	  set mol2 [lindex $target_mol $k]
-	  for {set l 0} {$l < [molinfo $mol2 get numframes]} {incr l} {
-	    #if {$i == $j && $k == $l} {continue}
+	  for {set l 0} {$l < $nframes($mol2)} {incr l} {
 	    if {$i == $k && $j >= $l   ||   $i > $k} {continue}
 	    
 	    incr count
-	    #if {[expr fmod($count*100.0/$nsteps, 10.0)] == 0} {
-	    #  puts -nonewline "."
-	    #}
-	    $sel_move($mol2) frame $l
 	    $sel_current($mol2) frame $l
-	    set trans_mat [measure fit $sel_current($mol2) $sel_ref($mol1) weight user]
-	    $sel_move($mol2) move $trans_mat
+	    $sel_move($mol2) frame $l
+	    $sel_move($mol2) move [measure fit $sel_current($mol2) $sel_ref($mol1) weight user]
 	    
 	    # Compute rmsd for each residue
 	    for {set res 0} {$res < $nresidues} {incr res} {
 	      $sel_res($mol2:$res) frame $l
-	      set rmsd [measure rmsd $sel_res_ref($mol1:$res) $sel_res($mol2:$res)]
-	      lappend rmsd_res($res) $rmsd
-	      set rmsd_mean($res) [expr $rmsd_mean($res) + $rmsd]
+	      set rmsd_mean($res) [expr $rmsd_mean($res) + [measure rmsd $sel_res_ref($mol1:$res) $sel_res($mol2:$res)]]
 	    }
 	  }
 	}
@@ -1027,35 +1011,21 @@ proc rmsdtt::doByRes {} {
     }
     puts ""
 
-    if {$byres_update} {
-      display update
-    }
+    if {$byres_update} {display update}
 
     
     # Compute mean, mix and max
+    set rmsd_min [expr $rmsd_mean(0)/$count]
+    set rmsd_max $rmsd_min
     for {set res 0} {$res < $nresidues} {incr res} {
       set rmsd_mean($res) [expr $rmsd_mean($res)/$count]
-      if {$res == 0} {
+      if {$rmsd_mean($res) < $rmsd_min} {
 	set rmsd_min $rmsd_mean($res)
+	continue
+      }
+      if {$rmsd_mean($res) > $rmsd_max} {
 	set rmsd_max $rmsd_mean($res)
-      } else {
-	if {$rmsd_mean($res) < $rmsd_min} {
-	  set rmsd_min $rmsd_mean($res)
-	}
-	if {$rmsd_mean($res) > $rmsd_max} {
-	  set rmsd_max $rmsd_mean($res)
-	}
       }
-    }
-
-    # Compute sd
-    #puts "[llength $rmsd_res(1)] $count"
-    for {set res 0} {$res < $nresidues} {incr res} {
-      for {set v 0} {$v < $count} {incr v} {
-	set temp [expr [lindex $rmsd_res($res) $v] - $rmsd_mean($res)]
-	set rmsd_sd($res) [expr $rmsd_sd($res) + $temp*$temp]
-      }
-      set rmsd_sd($res) [expr sqrt($rmsd_sd($res)/($count-1))]
     }
 
     # Compute weights
@@ -1112,20 +1082,16 @@ proc rmsdtt::doByRes {} {
     if {$byres_save} {
       for {set res 0} {$res < $nresidues} {incr res} {
 	set data [lindex [$sel_res([lindex $target_mol 0]:$res) get {residue resid resname chain user}] 0]
-	puts $fid [format "%4s %7d %5d %4s %5s %7.3f %5.2f %5.3f" $iter [lindex $data 0] [lindex $data 1] [lindex $data 2] [lindex $data 3] $rmsd_mean($res) $rmsd_sd($res) [lindex $data 4]]
+	puts $fid [format "%4s %7d %5d %4s %5s %7.3f %5.3f" $iter [lindex $data 0] [lindex $data 1] [lindex $data 2] [lindex $data 3] $rmsd_mean($res) [lindex $data 4]]
       }
     }
 
     incr iter
   }
 
-  if {$plot_use} {
-    $plothandle replot
-  }
+  if {$plot_use} {$plothandle replot}
   
-  if {$byres_save} {
-    close $fid
-  }
+  if {$byres_save} {close $fid}
 
 
   # clustering
@@ -1139,7 +1105,7 @@ proc rmsdtt::doByRes {} {
     }
     puts $fid2 ""
     
-    for {set i 0} {$i < [llength $target_mol]} {incr i} {
+    for {set i 0} {$i < $nmols} {incr i} {
       set mol1 [lindex $target_mol $i]
       for {set j 0} {$j < [molinfo $mol1 get numframes]} {incr j} {
 	$sel_ref($mol1) frame $j
@@ -1147,7 +1113,7 @@ proc rmsdtt::doByRes {} {
 	  $sel_res_ref($mol1:$res) frame $j
 	}
 	
-	for {set k 0} {$k < [llength $target_mol]} {incr k} {
+	for {set k 0} {$k < $nmols} {incr k} {
 	  set mol2 [lindex $target_mol $k]
 	  for {set l 0} {$l < [molinfo $mol2 get numframes]} {incr l} {
 	    #if {$i == $j && $k == $l} {continue}
