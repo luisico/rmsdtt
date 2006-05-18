@@ -896,10 +896,17 @@ proc rmsdtt::doByRes {} {
     }
   }
   if {$fast} {
-    puts "Using modified version of VMD!"
-    if [catch {package require BLT} msg] {
-      showMessage "Package BLT is not available"
+    puts -nonewline "Trying fast algorithm...   "
+    if [catch { set ret [measure rmsd $sel_ref([lindex $target_mol 0]) $sel_ref([lindex $target_mol 0]) byatom] } msg] {
+      puts "hacked VMD not found!"
       set fast 0
+    }
+    if [catch {package require BLT} msg] {
+      puts "package BLT is not available"
+      set fast 0
+    }
+    if {$fast} {
+      puts "OK"
     }
   }
 
@@ -984,14 +991,17 @@ proc rmsdtt::doByRes {} {
   if {$byres_update} {display update}
 
 
-  # Initizalize rmsd by residue
+  # Initizalize rmsd by residue and weights
   if {$fast} {
     ::blt::vector create zeros
+    ::blt::vector create weights
+    ::blt::vector create temp
     zeros set 0.0
+    weights set 1.0
     for {set res 1} {$res < $nresidues} {incr res} {
       zeros append 0.0
+      weights append 1.0
     }
-    ::blt::vector create temp
   } else {
     for {set res 0} {$res < $nresidues} {incr res} {
       lappend rmsd_mean 0.0
@@ -1034,15 +1044,15 @@ proc rmsdtt::doByRes {} {
 	    incr count
 	    $sel_current($mol2) frame $l
 	    $sel_move($mol2) frame $l
-	    $sel_move($mol2) move [measure fit $sel_current($mol2) $sel_ref($mol1) weight user]
 	    
-	    # Compute rmsd for each residue
 	    if {$fast} {
+	      $sel_move($mol2) move [measure fit $sel_current($mol2) $sel_ref($mol1) weight [weights range 0 end]]
 	      lassign [measure rmsd $sel_ref($mol1) $sel_current($mol2) byatom] global_rmsd byres_rmsd
 	      temp set $byres_rmsd
 	      rmsd_mean set [rmsd_mean + temp]
 
 	    } else {
+	      $sel_move($mol2) move [measure fit $sel_current($mol2) $sel_ref($mol1) weight user]
 	      for {set res 0} {$res < $nresidues} {incr res} {
 		$sel_res($mol2:$res) frame $l
 		lset rmsd_mean $res [expr [lindex $rmsd_mean $res] + [measure rmsd $sel_res_ref($mol1:$res) $sel_res($mol2:$res)]]
@@ -1054,9 +1064,6 @@ proc rmsdtt::doByRes {} {
     }
     puts ""
 
-    if {$byres_update} {display update}
-
-    
     # Compute mean, mix and max
     if {$fast} {
       rmsd_mean set [rmsd_mean / $count]
@@ -1081,28 +1088,30 @@ proc rmsdtt::doByRes {} {
     if {$fast} {
       switch $byres_type {
 	exp {
-	  set weight [::blt::vector expr {exp(-$byres_factor * rmsd_mean)}]
+	  weights expr { exp(-$byres_factor * rmsd_mean) }
 	}
 	expmin {
-	  set weight [::blt::vector expr {exp(-$byres_factor*( rmsd_mean - $rmsd_min))}]
+	  weights expr { exp(-$byres_factor*( rmsd_mean - $rmsd_min)) }
 	}
 	minmax {
-	  if {$rmsd_max == $rmsd_min} {
+	  if {$rmsd_max == $rmsd_min} {#!!!!!!!!!!!!!!!!
 	    set weight 1
 	  } else { 
-	    set weight [::blt::vector {expr ($rmsd_max- rmsd_mean) / ($rmsd_max-$rmsd_min)}]
+	    weights expr { ($rmsd_max- rmsd_mean) / ($rmsd_max-$rmsd_min) }
 	  }
 	}
 	gaussian {
-	  set weight [::blt::vector {expr exp(-( rmsd_mean * rmsd_mean )/$byres_factor)}]
+	  weights expr { exp(-( rmsd_mean * rmsd_mean )/$byres_factor) }
 	}
       }
       
-      foreach mol $target_mol  {
-	for {set i 0} {$i < [molinfo $mol get numframes]} {incr i} {
-	  $sel_ref($mol) frame $i
-	  $sel_ref($mol) set user $weight
-	  $sel_ref($mol) set beta [rmsd_mean range 0 end]
+      if {$byres_update} {
+	foreach mol $target_mol  {
+	  for {set i 0} {$i < [molinfo $mol get numframes]} {incr i} {
+	    $sel_ref($mol) frame $i
+	    $sel_ref($mol) set user [weights range 0 end]
+	    $sel_ref($mol) set beta [rmsd_mean range 0 end]
+	  }
 	}
       }
 
@@ -1117,7 +1126,7 @@ proc rmsdtt::doByRes {} {
       if {$byres_save} {
 	for {set res 0} {$res < $nresidues} {incr res} {
 	  set data [lindex [$sel_res([lindex $target_mol 0]:$res) get {residue resid resname chain}] 0]
-	  puts $fid [format "%4s %7d %5d %4s %5s %7.3f %5.3f" $iter [lindex $data 0] [lindex $data 1] [lindex $data 2] [lindex $data 3] [rmsd_mean index $res] [lindex $weight $res]]
+	  puts $fid [format "%4s %7d %5d %4s %5s %7.3f %5.3f" $iter [lindex $data 0] [lindex $data 1] [lindex $data 2] [lindex $data 3] [rmsd_mean index $res] [weights index $res]]
 	}
       }
       
@@ -1171,10 +1180,22 @@ proc rmsdtt::doByRes {} {
     incr iter
   }
 
+  if {$byres_update} {display update}
+    
   if {$plot_use} {$plothandle replot}
   
   if {$byres_save} {close $fid}
 
+  # Final update of weights and rmsd
+  if {$fast} {
+    foreach mol $target_mol  {
+      for {set i 0} {$i < $nframes($mol)} {incr i} {
+	$sel_ref($mol) frame $i
+	$sel_ref($mol) set user [weights range 0 end]
+	$sel_ref($mol) set beta [rmsd_mean range 0 end]
+      }
+    }
+  }
 
   # clustering
   if {$byres_cluster} {
@@ -1187,41 +1208,49 @@ proc rmsdtt::doByRes {} {
     }
     puts $fid2 ""
     
+    if {$fast} {
+      set weight_sum [::blt::vector expr {sum(weights)}]
+    }
+    
     for {set i 0} {$i < $nmols} {incr i} {
       set mol1 [lindex $target_mol $i]
       for {set j 0} {$j < [molinfo $mol1 get numframes]} {incr j} {
 	$sel_ref($mol1) frame $j
-	for {set res 0} {$res < $nresidues} {incr res} {
-	  $sel_res_ref($mol1:$res) frame $j
+	if {!$fast} {
+	  for {set res 0} {$res < $nresidues} {incr res} {
+	    $sel_res_ref($mol1:$res) frame $j
+	  }
 	}
 	
 	for {set k 0} {$k < $nmols} {incr k} {
 	  set mol2 [lindex $target_mol $k]
 	  for {set l 0} {$l < [molinfo $mol2 get numframes]} {incr l} {
-	    #if {$i == $j && $k == $l} {continue}
-	    #if {$i == $k && $j >= $l   ||   $i > $k} {
-	    #  puts $fid [format "%2d:%-3d %2d:%-3d NA NA" $i $j $k $l]
-	    #  continue
-	    #}
+
 	    $sel_current($mol2) frame $l
-	    
-	    set cluster_rms  [measure rmsd $sel_current($mol2) $sel_ref($mol1)]
-	    set cluster_rmsw [measure rmsd $sel_current($mol2) $sel_ref($mol1) weight user]
+	    set cluster_rms [measure rmsd $sel_current($mol2) $sel_ref($mol1)]
 
 	    puts -nonewline $fid2 [format "%2d:%-3d %2d:%-3d" $i $j $k $l]
-	    set cluster_byres 0.0
-	    set weight_tot 0.0
-	    for {set res 0} {$res < $nresidues} {incr res} {
-	      $sel_res($mol2:$res) frame $l
-	      set rmsd [measure rmsd $sel_res_ref($mol1:$res) $sel_res($mol2:$res)]
-	      set weight [lindex [$sel_res($mol1:$res) get user] 0]
-	      set weight_tot [expr $weight_tot + $weight]
-	      set cluster_byres [expr $cluster_byres + $weight*$rmsd]
-	      puts -nonewline $fid2 [format " %7.3f" $rmsd]
+	    if {$fast} {
+	      lassign [measure rmsd $sel_current($mol2) $sel_ref($mol1) byatom weight [weights range 0 end]] cluster_rmsw cluster_byres
+	      puts $fid2 $cluster_byres
+	      temp set $cluster_byres
+	      set cluster_byres [expr [::blt::vector expr {sum(temp)}] / $weight_sum ]
+	    } else {
+	      set cluster_rmsw [measure rmsd $sel_current($mol2) $sel_ref($mol1) weight user]
+	      set cluster_byres 0.0
+	      set weight_tot 0.0
+	      for {set res 0} {$res < $nresidues} {incr res} {
+		$sel_res($mol2:$res) frame $l
+		set rmsd [measure rmsd $sel_res_ref($mol1:$res) $sel_res($mol2:$res)]
+		set weight [lindex [$sel_res_ref($mol1:$res) get user] 0]
+		set weight_tot [expr $weight_tot + $weight]
+		set cluster_byres [expr $cluster_byres + $weight * $rmsd]
+		puts -nonewline $fid2 [format " %7.3f" $rmsd]
+	      }
+	      set cluster_byres [expr $cluster_byres / $weight_tot]
+	      puts $fid2 ""
 	    }
-	    set cluster_byres [expr $cluster_byres / $weight_tot]
-	    puts $fid2 ""
-
+	    
 	    puts $fid1 [format "%2d:%-3d %2d:%-3d %7.3f %7.3f %7.3f" $i $j $k $l $cluster_rms $cluster_rmsw $cluster_byres]
 
 	  }
