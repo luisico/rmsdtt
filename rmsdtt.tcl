@@ -261,54 +261,64 @@ proc rmsdtt::rmsdtt {} {
     variable byres_save 1
     variable byres_file "byres.dat"
     variable byres_cluster 0
+    variable byres_cluster_only 0
+    variable byres_cluster_fit 0
+    variable byres_cluster_weights_from 0
 
     labelframe $w.byres -text "Iterative Fitting by residue" -relief ridge -bd 2
     pack $w.byres -side top -fill x
     
-    frame $w.byres.up
-    pack $w.byres.up -side top -fill x
+    frame $w.byres.row1
+    pack $w.byres.row1 -side top -fill x
 
-    button $w.byres.up.button -relief raised -bd 2 -text "FitByRes" -command [namespace current]::doByRes
-    label $w.byres.up.niterlabel -text "Iters:"
-    entry $w.byres.up.niter -width 4 -textvariable [namespace current]::byres_niter
-    label $w.byres.up.factorlabel -text "Factor:"
+    button $w.byres.row1.button -relief raised -bd 2 -text "FitByRes" -command [namespace current]::doByRes
+    label $w.byres.row1.niterlabel -text "Iters:"
+    entry $w.byres.row1.niter -width 4 -textvariable [namespace current]::byres_niter
+    label $w.byres.row1.factorlabel -text "Factor:"
 
-    menubutton $w.byres.up.type -textvariable [namespace current]::byres_type -menu $w.byres.up.type.menu -relief raised -direction flush -width 6
-    menu $w.byres.up.type.menu -tearoff no
+    menubutton $w.byres.row1.type -textvariable [namespace current]::byres_type -menu $w.byres.row1.type.menu -relief raised -direction flush -width 6
+    menu $w.byres.row1.type.menu -tearoff no
     foreach type [list exp expmin minmax gaussian] {
-      $w.byres.up.type.menu add radiobutton -label $type -variable [namespace current]::byres_type -value $type
+      $w.byres.row1.type.menu add radiobutton -label $type -variable [namespace current]::byres_type -value $type
     }
 
-    entry $w.byres.up.factor -width 4 -textvariable [namespace current]::byres_factor
-    checkbutton $w.byres.up.plot -text "Plot" -variable [namespace current]::byres_plot
-    checkbutton $w.byres.up.save -text "Save" -variable [namespace current]::byres_save
-    entry $w.byres.up.file -width 20 -textvariable [namespace current]::byres_file
+    entry $w.byres.row1.factor -width 4 -textvariable [namespace current]::byres_factor
+    checkbutton $w.byres.row1.plot -text "Plot" -variable [namespace current]::byres_plot
+    checkbutton $w.byres.row1.save -text "Save" -variable [namespace current]::byres_save
+    entry $w.byres.row1.file -width 20 -textvariable [namespace current]::byres_file
 
-    pack $w.byres.up.button $w.byres.up.niterlabel $w.byres.up.niter $w.byres.up.factorlabel $w.byres.up.type $w.byres.up.factor $w.byres.up.plot $w.byres.up.save $w.byres.up.file -side left -anchor w
+    pack $w.byres.row1.button $w.byres.row1.niterlabel $w.byres.row1.niter $w.byres.row1.factorlabel $w.byres.row1.type $w.byres.row1.factor $w.byres.row1.plot $w.byres.row1.save $w.byres.row1.file -side left -anchor w
 
-    frame $w.byres.down
-    pack $w.byres.down -side top -fill x
+    frame $w.byres.row2
+    pack $w.byres.row2 -side top -fill x
 
-    checkbutton $w.byres.down.repre -text "Rep" -variable [namespace current]::byres_repre
-    entry $w.byres.down.sel2 -width 10 -textvariable [namespace current]::byres_sel2
-    checkbutton $w.byres.down.replace -text "replace" -variable [namespace current]::byres_replace
-    menubutton $w.byres.down.style -text "Style" -menu $w.byres.down.style.menu -relief raised -direction flush
-    menu $w.byres.down.style.menu -tearoff no
+    checkbutton $w.byres.row2.repre -text "Rep" -variable [namespace current]::byres_repre
+    entry $w.byres.row2.sel2 -width 10 -textvariable [namespace current]::byres_sel2
+    checkbutton $w.byres.row2.replace -text "replace" -variable [namespace current]::byres_replace
+    menubutton $w.byres.row2.style -text "Style" -menu $w.byres.row2.style.menu -relief raised -direction flush
+    menu $w.byres.row2.style.menu -tearoff no
     foreach style [list Lines Bonds DynamicBonds HBonds Points VDW CPK Licorice Trace Tube Ribbons NewRibbons Cartoon NewCartoon MSMS Surf VolumeSlice Isosurface Dotted Solvent] {
-      $w.byres.down.style.menu add radiobutton -label $style -variable [namespace current]::byres_style -value $style
+      $w.byres.row2.style.menu add radiobutton -label $style -variable [namespace current]::byres_style -value $style
     }
-    menubutton $w.byres.down.scale -text "Scale" -menu $w.byres.down.scale.menu -relief raised -direction flush
-    menu $w.byres.down.scale.menu -tearoff no
+    menubutton $w.byres.row2.scale -text "Scale" -menu $w.byres.row2.scale.menu -relief raised -direction flush
+    menu $w.byres.row2.scale.menu -tearoff no
     foreach item [list unchanged RGB BGR RWB BWR RWG GWR GWB BWG BlkW WBlk] {
-      $w.byres.down.scale.menu add radiobutton -label $item -variable [namespace current]::byres_scale -value $item
+      $w.byres.row2.scale.menu add radiobutton -label $item -variable [namespace current]::byres_scale -value $item
     }
-    checkbutton $w.byres.down.framesall -text "all frames" -variable [namespace current]::byres_frames_all
-    checkbutton $w.byres.down.update -text "Update" -variable [namespace current]::byres_update
+    checkbutton $w.byres.row2.framesall -text "all frames" -variable [namespace current]::byres_frames_all
+    checkbutton $w.byres.row2.update -text "Update" -variable [namespace current]::byres_update
     
-    pack $w.byres.down.repre $w.byres.down.sel2 $w.byres.down.replace $w.byres.down.style $w.byres.down.scale $w.byres.down.framesall $w.byres.down.update -side left -anchor w
+    pack $w.byres.row2.repre $w.byres.row2.sel2 $w.byres.row2.replace $w.byres.row2.style $w.byres.row2.scale $w.byres.row2.framesall $w.byres.row2.update -side left -anchor w
 
-    checkbutton $w.byres.down.cluster -text "cluster" -variable [namespace current]::byres_cluster
-    pack $w.byres.down.cluster
+    frame $w.byres.row3
+    pack $w.byres.row3 -side top -fill x
+
+    checkbutton $w.byres.row3.cluster -text "cluster" -variable [namespace current]::byres_cluster
+    checkbutton $w.byres.row3.cluster_only -text "cluster only" -variable [namespace current]::byres_cluster_only
+    checkbutton $w.byres.row3.cluster_fit -text "cluster fit" -variable [namespace current]::byres_cluster_fit
+    label $w.byres.row3.cluster_weights_l -text "weights from:"
+    entry $w.byres.row3.cluster_weights -width 2 -textvariable [namespace current]::byres_cluster_weights_from
+    pack $w.byres.row3.cluster $w.byres.row3.cluster_only $w.byres.row3.cluster_fit $w.byres.row3.cluster_weights_l $w.byres.row3.cluster_weights -side left -anchor w
   }
   
   # Data
@@ -584,7 +594,7 @@ proc rmsdtt::doRmsd {} {
     $datalist($v) delete 0 end
   }
   foreach i $target_mol {
-    $datalist(id)  insert end [format "%2s"    $i]
+    $datalist(id)  insert end [format "%d"    $i]
     $datalist(mol) insert end [format "%s"     [molinfo $i get name]]
     $datalist(avg) insert end [format "%8.3f" $rms_ave($i)]
     if {$stats} {
@@ -818,6 +828,9 @@ proc rmsdtt::doByRes {} {
   variable byres_save
   variable byres_file
   variable byres_cluster
+  variable byres_cluster_only
+  variable byres_cluster_fit
+  variable byres_cluster_weights_from
 
   set sel1 [set_sel]
   if {$sel1 == ""} {
@@ -866,7 +879,7 @@ proc rmsdtt::doByRes {} {
     set sel_ref($mol) [atomselect $mol $sel1]
     set sel_current($mol) [atomselect $mol $sel1]
     set sel_move($mol) [atomselect $mol "all"]
-
+    
     # Make objects for residue sel
     set residues($mol) [lsort -unique -integer [[atomselect $mol $sel1] get residue]]
     for {set i 0} {$i < [llength $residues($mol)]} {incr i} {
@@ -879,10 +892,12 @@ proc rmsdtt::doByRes {} {
     }
 
     # Set the user field of all frames = 1 for use in initial weighting scheme
-    set sel2_atoms [atomselect $mol $sel2]
-    for {set i 0} {$i < $nframes($mol)} {incr i} {
-      $sel2_atoms frame $i
-      $sel2_atoms set user 1
+    if {!$byres_cluster_only} {
+      set sel2_atoms [atomselect $mol $sel2]
+      for {set i 0} {$i < $nframes($mol)} {incr i} {
+	$sel2_atoms frame $i
+	$sel2_atoms set user 1
+      }
     }
 
     # Division of frames in contigous windows
@@ -907,7 +922,7 @@ proc rmsdtt::doByRes {} {
       set fast 0
     }
     if {$fast} {
-      puts "OK"
+      puts "nice!!!"
       
       # Delete residue objects
       foreach mol $target_mol  {
@@ -952,13 +967,13 @@ proc rmsdtt::doByRes {} {
   }
   
   # Header for file
-  if {$byres_save} {
+  if {$byres_save && !$byres_cluster_only} {
     set fid [open $byres_file w]
     puts $fid [format "%4s %7s %5s %4s %5s %7s %5s" "iter" "residue" "resid" "name" "chain" "mean" "w"]
   }
 
   # Create representation
-  if {$byres_repre} {
+  if {$byres_repre && !$byres_cluster_only} {
     foreach mol $target_mol {
       mol rep $byres_style
       mol color User
@@ -1017,202 +1032,202 @@ proc rmsdtt::doByRes {} {
   }
 
   # Iterate over fitting and weighting niter times
-  set iter 1
-  while {$iter <= $byres_niter} {
-    puts -nonewline "Iteration: $iter "
-
-    # Reset rmsd by residue
-    if {$fast} {
-      zeros dup rmsd_mean
-    } else {
-      for {set res 0} {$res < $nresidues} {incr res} {
-	lset rmsd_mean $res 0.0
-      }
-    }
-    
-    if {$plot_use} {
-      set y {}
-      set x {}
-    }
-
-    set count 0
-    for {set i 0} {$i < $nmols} {incr i} {
-      set mol1 [lindex $target_mol $i]
-      for {set j 0} {$j < $nframes($mol1)} {incr j} {
-	$sel_ref($mol1) frame $j
-	if {!$fast} {
-	  for {set res 0} {$res < $nresidues} {incr res} {
-	    $sel_res_ref($mol1:$res) frame $j
-	  }
+  if {!$byres_cluster_only} {
+    set iter 1
+    while {$iter <= $byres_niter} {
+      puts -nonewline "Iteration: $iter "
+      
+      # Reset rmsd by residue
+      if {$fast} {
+	zeros dup rmsd_mean
+      } else {
+	for {set res 0} {$res < $nresidues} {incr res} {
+	  lset rmsd_mean $res 0.0
 	}
-	
-	for {set k 0} {$k < $nmols} {incr k} {
-	  set mol2 [lindex $target_mol $k]
-	  for {set l 0} {$l < $nframes($mol2)} {incr l} {
-	    if {$i == $k && $j >= $l   ||   $i > $k} {continue}
-	    
-	    incr count
-	    $sel_current($mol2) frame $l
-	    $sel_move($mol2) frame $l
-	    
-	    if {$fast} {
-	      $sel_move($mol2) move [measure fit $sel_current($mol2) $sel_ref($mol1) weight [weights range 0 end]]
-	      lassign [measure rmsd $sel_ref($mol1) $sel_current($mol2) byatom] global_rmsd byres_rmsd
-	      temp set $byres_rmsd
-	      rmsd_mean set [rmsd_mean + temp]
-
-	    } else {
-	      $sel_move($mol2) move [measure fit $sel_current($mol2) $sel_ref($mol1) weight user]
-	      for {set res 0} {$res < $nresidues} {incr res} {
-		$sel_res($mol2:$res) frame $l
-		lset rmsd_mean $res [expr [lindex $rmsd_mean $res] + [measure rmsd $sel_res_ref($mol1:$res) $sel_res($mol2:$res)]]
+      }
+      
+      set count 0
+      for {set i 0} {$i < $nmols} {incr i} {
+	set mol1 [lindex $target_mol $i]
+	for {set j 0} {$j < $nframes($mol1)} {incr j} {
+	  $sel_ref($mol1) frame $j
+	  if {!$fast} {
+	    for {set res 0} {$res < $nresidues} {incr res} {
+	      $sel_res_ref($mol1:$res) frame $j
+	    }
+	  }
+	  
+	  for {set k 0} {$k < $nmols} {incr k} {
+	    set mol2 [lindex $target_mol $k]
+	    for {set l 0} {$l < $nframes($mol2)} {incr l} {
+	      if {$i == $k && $j >= $l   ||   $i > $k} {continue}
+	      
+	      incr count
+	      $sel_current($mol2) frame $l
+	      $sel_move($mol2) frame $l
+	      
+	      if {$fast} {
+		$sel_move($mol2) move [measure fit $sel_current($mol2) $sel_ref($mol1) weight [weights range 0 end]]
+		lassign [measure rmsd $sel_ref($mol1) $sel_current($mol2) byatom] global_rmsd byres_rmsd
+		temp set $byres_rmsd
+		rmsd_mean set [rmsd_mean + temp]
+		
+	      } else {
+		$sel_move($mol2) move [measure fit $sel_current($mol2) $sel_ref($mol1) weight user]
+		for {set res 0} {$res < $nresidues} {incr res} {
+		  $sel_res($mol2:$res) frame $l
+		  lset rmsd_mean $res [expr [lindex $rmsd_mean $res] + [measure rmsd $sel_res_ref($mol1:$res) $sel_res($mol2:$res)]]
+		}
 	      }
 	    }
 	  }
 	}
       }
-    }
-    puts ""
-
-    if {$fast} {
-      # Compute mean, mix and max
-      rmsd_mean set [rmsd_mean / $count]
-      set rmsd_min $rmsd_mean(min)
-      set rmsd_max $rmsd_mean(max)
-
-      # Compute weights
-      switch $byres_type {
-	exp {
-	  weights expr { exp(-$byres_factor * rmsd_mean) }
-	}
-	expmin {
-	  weights expr { exp(-$byres_factor*( rmsd_mean - $rmsd_min)) }
-	}
-	minmax {
-	  if {$rmsd_max == $rmsd_min} {#!!!!!!!!!!!!!!!!
-	    set weight 1
-	  } else { 
-	    weights expr { ($rmsd_max- rmsd_mean) / ($rmsd_max-$rmsd_min) }
-	  }
-	}
-	gaussian {
-	  weights expr { exp(-( rmsd_mean * rmsd_mean )/$byres_factor) }
-	}
-      }
+      puts ""
       
-      # Update display
-      if {$byres_update} {
-	foreach mol $target_mol  {
-	  for {set i 0} {$i < [molinfo $mol get numframes]} {incr i} {
-	    $sel_ref($mol) frame $i
-	    $sel_ref($mol) set user [weights range 0 end]
-	    $sel_ref($mol) set beta [rmsd_mean range 0 end]
-	  }
-	}
-      }
-      
-      # Plot
-      if {$plot_use} {
-	set x [::blt::vector seq 0 $nresidues]
-	set y [rmsd_mean range 0 end]
-	set color [index2rgb $iter]
-	set legend "Iter $iter"
-	$plothandle add $x $y -marker point -radius 2 -fillcolor $color -linecolor $color -nostats -legend $legend
-      }
-      
-      # Save
-      if {$byres_save} {
-	set data [$sel_ref([lindex $target_mol 0]) get {residue resid resname chain}]
-	for {set res 0} {$res < $nresidues} {incr res} {
-	  lassign [lindex $data $res] d_residue d_resid d_resname d_chain
-	  puts $fid [format "%4s %7d %5d %4s %5s %7.3f %5.3f" $iter $d_residue $d_resid $d_resname $d_chain [rmsd_mean index $res] [weights index $res]]
-	}
-      }
-
-    } else {
-    # Compute mean, mix and max
-      set rmsd_min [expr [lindex $rmsd_mean 0] / $count]
-      set rmsd_max $rmsd_min
-      for {set res 0} {$res < [llength $rmsd_mean]} {incr res} {
-	lset rmsd_mean $res [expr [lindex $rmsd_mean $res] / $count]
-	if {[lindex $rmsd_mean $res] < $rmsd_min} {
-	  set rmsd_min [lindex $rmsd_mean $res]
-	  continue
-	}
-	if {[lindex $rmsd_mean $res] > $rmsd_max} {
-	  set rmsd_max [lindex $rmsd_mean $res]
-	}
-      }
-
-      # Compute weights
-      for {set res 0} {$res < $nresidues} {incr res} {
-	set r [lindex $rmsd_mean $res]
+      if {$fast} {
+	# Compute mean, mix and max
+	rmsd_mean set [rmsd_mean / $count]
+	set rmsd_min $rmsd_mean(min)
+	set rmsd_max $rmsd_mean(max)
+	
+	# Compute weights
 	switch $byres_type {
 	  exp {
-	    set weight [expr exp(-$byres_factor*$r)]
+	    weights expr { exp(-$byres_factor * rmsd_mean) }
 	  }
 	  expmin {
-	    set weight [expr exp(-$byres_factor*($r - $rmsd_min))]
+	    weights expr { exp(-$byres_factor*( rmsd_mean - $rmsd_min)) }
 	  }
 	  minmax {
-	    if {$rmsd_max == $rmsd_min} {
+	    if {$rmsd_max == $rmsd_min} {#!!!!!!!!!!!!!!!!
 	      set weight 1
 	    } else { 
-	      set weight [expr ($rmsd_max-$r) / ($rmsd_max-$rmsd_min)]
+	      weights expr { ($rmsd_max- rmsd_mean) / ($rmsd_max-$rmsd_min) }
 	    }
 	  }
 	  gaussian {
-	    set weight [expr exp(-($r*$r)/$byres_factor)]
+	    weights expr { exp(-( rmsd_mean * rmsd_mean )/$byres_factor) }
 	  }
 	}
-	#puts [format "\tRes: %5d %6.3f %6.3f %6.3f %6.2f" $res $rmsd_mean($res) $rmsd_min $rmsd_max $weight]
-
-	# Update
-	foreach mol $target_mol  {
-	  for {set i 0} {$i < [molinfo $mol get numframes]} {incr i} {
-	    $sel_res($mol:$res) frame $i
-	    $sel_res($mol:$res) set user $weight
-	    $sel_res($mol:$res) set beta $r
+	
+	# Update display
+	if {$byres_update} {
+	  foreach mol $target_mol  {
+	    for {set i 0} {$i < [molinfo $mol get numframes]} {incr i} {
+	      $sel_ref($mol) frame $i
+	      $sel_ref($mol) set user [weights range 0 end]
+	      $sel_ref($mol) set beta [rmsd_mean range 0 end]
+	    }
 	  }
 	}
 	
 	# Plot
 	if {$plot_use} {
-	  lappend x $res
-	  lappend y $r
 	  set color [index2rgb $iter]
 	  set legend "Iter $iter"
-	  $plothandle add $x $y -marker point -radius 2 -fillcolor $color -linecolor $color -nostats -legend $legend
+	  $plothandle add $residues([lindex $target_mol 0]) [rmsd_mean range 0 end] -marker point -radius 2 -fillcolor $color -linecolor $color -nostats -legend $legend
 	}
 	
 	# Save
 	if {$byres_save} {
-	  set data [lindex [$sel_res([lindex $target_mol 0]:$res) get {residue resid resname chain user}] 0]
-	  puts $fid [format "%4s %7d %5d %4s %5s %7.3f %5.3f" $iter [lindex $data 0] [lindex $data 1] [lindex $data 2] [lindex $data 3] $r [lindex $data 4]]
+	  set data [$sel_ref([lindex $target_mol 0]) get {residue resid resname chain}]
+	  for {set res 0} {$res < $nresidues} {incr res} {
+	    lassign [lindex $data $res] d_residue d_resid d_resname d_chain
+	    puts $fid [format "%4s %7d %5d %4s %5s %7.3f %5.3f" $iter $d_residue $d_resid $d_resname $d_chain [rmsd_mean index $res] [weights index $res]]
+	  }
+	}
+	
+      } else { # not fast
+	if {$plot_use} {
+	  set y {}
+	  set x {}
+	}
+      
+	# Compute mean, mix and max
+	set rmsd_min [expr [lindex $rmsd_mean 0] / $count]
+	set rmsd_max $rmsd_min
+	for {set res 0} {$res < [llength $rmsd_mean]} {incr res} {
+	  lset rmsd_mean $res [expr [lindex $rmsd_mean $res] / $count]
+	  if {[lindex $rmsd_mean $res] < $rmsd_min} {
+	    set rmsd_min [lindex $rmsd_mean $res]
+	    continue
+	  }
+	  if {[lindex $rmsd_mean $res] > $rmsd_max} {
+	    set rmsd_max [lindex $rmsd_mean $res]
+	  }
+	}
+	
+	# Compute weights
+	for {set res 0} {$res < $nresidues} {incr res} {
+	  set r [lindex $rmsd_mean $res]
+	  switch $byres_type {
+	    exp {
+	      set weight [expr exp(-$byres_factor*$r)]
+	    }
+	    expmin {
+	      set weight [expr exp(-$byres_factor*($r - $rmsd_min))]
+	    }
+	    minmax {
+	      if {$rmsd_max == $rmsd_min} {
+		set weight 1
+	      } else { 
+		set weight [expr ($rmsd_max-$r) / ($rmsd_max-$rmsd_min)]
+	      }
+	    }
+	    gaussian {
+	      set weight [expr exp(-($r*$r)/$byres_factor)]
+	    }
+	  }
+	  #puts [format "\tRes: %5d %6.3f %6.3f %6.3f %6.2f" $res $rmsd_mean($res) $rmsd_min $rmsd_max $weight]
+	  
+	  # Update
+	  foreach mol $target_mol  {
+	    for {set i 0} {$i < [molinfo $mol get numframes]} {incr i} {
+	      $sel_res($mol:$res) frame $i
+	      $sel_res($mol:$res) set user $weight
+	      $sel_res($mol:$res) set beta $r
+	    }
+	  }
+	  
+	  # Plot
+	  if {$plot_use} {
+	    lappend x $res
+	    lappend y $r
+	    set color [index2rgb $iter]
+	    set legend "Iter $iter"
+	    $plothandle add $x $y -marker point -radius 2 -fillcolor $color -linecolor $color -nostats -legend $legend
+	  }
+	  
+	  # Save
+	  if {$byres_save} {
+	    set data [lindex [$sel_res([lindex $target_mol 0]:$res) get {residue resid resname chain user}] 0]
+	    puts $fid [format "%4s %7d %5d %4s %5s %7.3f %5.3f" $iter [lindex $data 0] [lindex $data 1] [lindex $data 2] [lindex $data 3] $r [lindex $data 4]]
+	  }
+	}
+      }
+      
+      incr iter
+    }
+    
+    # Update atom properties
+    if {$fast} {
+      foreach mol $target_mol  {
+	for {set i 0} {$i < $nframes($mol)} {incr i} {
+	  $sel_ref($mol) frame $i
+	  $sel_ref($mol) set user [weights range 0 end]
+	  $sel_ref($mol) set beta [rmsd_mean range 0 end]
 	}
       }
     }
-
-    incr iter
-  }
-
-  # Update atom properties
-  if {$fast} {
-    foreach mol $target_mol  {
-      for {set i 0} {$i < $nframes($mol)} {incr i} {
-	$sel_ref($mol) frame $i
-	$sel_ref($mol) set user [weights range 0 end]
-	$sel_ref($mol) set beta [rmsd_mean range 0 end]
-      }
-    }
-  }
-  if {$byres_update} {display update}
+    if {$byres_update} {display update}
     
-  if {$plot_use} {$plothandle replot}
+    if {$plot_use} {$plothandle replot}
+    
+    if {$byres_save} {close $fid}
+    
+  }
   
-  if {$byres_save} {close $fid}
-
-
   # clustering
   if {$byres_cluster} {
     puts "Clustering"
@@ -1224,6 +1239,9 @@ proc rmsdtt::doByRes {} {
     }
     puts $fid2 ""
     
+    if {$byres_cluster_only} {
+      weights set [$sel_ref($byres_cluster_weights_from) get user]
+    }
     if {$fast} {
       set weight_sum [::blt::vector expr { sum(weights) }]
     }
@@ -1243,9 +1261,18 @@ proc rmsdtt::doByRes {} {
 	  for {set l 0} {$l < [molinfo $mol2 get numframes]} {incr l} {
 
 	    $sel_current($mol2) frame $l
+	    if {$byres_cluster_fit} {
+	      $sel_move($mol2) frame $l
+	      if {$fast} {
+		$sel_move($mol2) move [measure fit $sel_current($mol2) $sel_ref($mol1) weight [weights range 0 end]]
+	      } else {
+		$sel_move($mol2) move [measure fit $sel_current($mol2) $sel_ref($mol1) weight user]
+	      }
+	    }
+
 	    set cluster_rms [measure rmsd $sel_current($mol2) $sel_ref($mol1)]
 
-	    puts -nonewline $fid2 [format "%2d:%-3d %2d:%-3d" $i $j $k $l]
+	    puts -nonewline $fid2 [format "%2d:%-3d %2d:%-3d" $mol1 $j $mol2 $l]
 	    if {$fast} {
 	      lassign [measure rmsd $sel_current($mol2) $sel_ref($mol1) byatom weight [weights range 0 end]] cluster_rmsw cluster_byres
 	      puts $fid2 $cluster_byres
@@ -1268,7 +1295,7 @@ proc rmsdtt::doByRes {} {
 	      puts $fid2 ""
 	    }
 	    
-	    puts $fid1 [format "%2d:%-3d %2d:%-3d %7.3f %7.3f %7.3f" $i $j $k $l $cluster_rms $cluster_rmsw $cluster_byres]
+	    puts $fid1 [format "%2d:%-3d %2d:%-3d %7.3f %7.3f %7.3f" $mol1 $j $mol2 $l $cluster_rms $cluster_rmsw $cluster_byres]
 
 	  }
 	}
@@ -2102,7 +2129,7 @@ proc rmsdtt::mol_add { {active 0} } {
     foreach key [list avg sd min max num] {
       $datalist($key) insert end ""
     }
-    $datalist(id) insert end [format "%2s" $molid]
+    $datalist(id) insert end [format "%d" $molid]
     $datalist(mol) insert end [format "%s" [molinfo $molid get name]]
   }
   [namespace current]::color_data
