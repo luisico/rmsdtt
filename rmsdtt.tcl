@@ -77,6 +77,9 @@ proc rmsdtt::rmsdtt {} {
   variable equiv_atom  CA
   variable equiv_lines {}
   variable equiv_mol   top
+  variable weighted_sw 0
+  variable weighted_field user
+  variable weighted_mol ref
 
   # If already initialized, just turn on
   if { [winfo exists .rmsdtt] } {
@@ -142,7 +145,6 @@ proc rmsdtt::rmsdtt {} {
 
   bind $w.top.left.sel <Return> "[namespace current]::draw_equiv"
 
-
   labelframe $w.top.left.mods -text "Selection modifiers" -relief ridge -bd 2
   pack $w.top.left.mods -side top -fill x
   checkbutton $w.top.left.mods.bb -text "Backbone" -variable [namespace current]::bb_only -command "[namespace current]::ctrlbb bb"
@@ -181,6 +183,23 @@ proc rmsdtt::rmsdtt {} {
   pack $w.top.left.equiv.0 $w.top.left.equiv.byres $w.top.left.equiv.atomlabel $w.top.left.equiv.atom -side left -anchor w
 
   bind $w.top.left.equiv.atom <Return> "[namespace current]::draw_equiv"
+
+  # Weighted rmsd
+  labelframe $w.top.left.weighted -text "Weighted rmsd / align" -relief ridge -bd 2
+  pack $w.top.left.weighted -side top -fill x
+
+  checkbutton $w.top.left.weighted.0 -text "On/Off" -variable [namespace current]::weighted_sw -command [namespace current]::ctrlgui
+  label $w.top.left.weighted.mollabel -text "Mol:"
+  menubutton $w.top.left.weighted.mol -relief raised -direction flush -textvariable [namespace current]::weighted_mol -menu $w.top.left.weighted.mol.menu
+  menu $w.top.left.weighted.mol.menu -tearoff no
+  label $w.top.left.weighted.fieldlabel -text "Field:"
+  menubutton $w.top.left.weighted.field -relief raised -direction flush -textvariable [namespace current]::weighted_field -menu $w.top.left.weighted.field.menu
+  menu $w.top.left.weighted.field.menu -tearoff no
+
+  pack $w.top.left.weighted.0 $w.top.left.weighted.mollabel $w.top.left.weighted.mol $w.top.left.weighted.fieldlabel $w.top.left.weighted.field -side left -anchor w
+  foreach field [list user mass charge beta occupancy] {
+    $w.top.left.weighted.field.menu add radiobutton -value $field -label $field -variable [namespace current]::weighted_field
+  }
 
   # Buttons
   frame $w.top.right
@@ -413,6 +432,7 @@ proc rmsdtt::rmsdtt {} {
   # Final code
   [namespace current]::mol_add 1
   [namespace current]::update_swap_types
+  [namespace current]::update_weighted_mol
   [namespace current]::ctrlgui
   
   update
@@ -672,11 +692,40 @@ proc rmsdtt::get_ref_mol {} {
 }
 
 
+proc rmsdtt::get_weights { sel } {
+  variable weighted_mol
+  variable weighted_field
+  variable rmsd_base
+  variable datalist
+  
+  if {$weighted_mol eq "ref"} {
+    set mol [[namespace current]::get_ref_mol]
+  } else {
+    set mol $weighted_mol
+  }
+  return [[atomselect $mol [$sel text]] get $weighted_field]
+}
+
+
 proc rmsdtt::get_rmsd { sel1 sel2 } {
   variable swap_sw
   variable swap_print
-
-  set rmsd [measure rmsd $sel1 $sel2]
+  variable weighted_sw
+  variable weighted_mol
+  variable weighted_field
+  
+  if {$weighted_sw} {
+    set weights [[namespace current]::get_weights $sel1]
+    set rmsd -1
+    if [catch { set rmsd [measure rmsd $sel1 $sel2 weight $weights] } msg] {
+      set message "$msg\nFirst weights were (mol \"$weighted_mol\"; field \"$weighted_field\"):\n[lrange $weights 0 20]..."
+      showMessage $message
+      return -code return
+    }
+    puts $rmsd
+  } else {
+    set rmsd [measure rmsd $sel1 $sel2]
+  }
 
   if {$swap_sw} {
     if {$swap_print} {
@@ -690,7 +739,11 @@ proc rmsdtt::get_rmsd { sel1 sel2 } {
     foreach r $res {
       set s [atomselect $mol2 "residue $r"]
       ::swap::swap_residue $s $frame2
-      set rmsd2 [measure rmsd $sel1 $sel2]
+      if {$weighted_sw} {
+	set rmsd2 [measure rmsd $sel1 $sel2 weight $weights]
+      } else {
+	set rmsd2 [measure rmsd $sel1 $sel2]
+      }
       if {$rmsd2 < $rmsd} {
 	if {$swap_print} {
 	  puts "swapped mol $mol2 frame $frame2 residue $r ([lindex [$s get {resname resid chain segname}] 0]) $rmsd $rmsd2"
@@ -1394,6 +1447,7 @@ proc rmsdtt::doByRes {} {
 
 }
 
+
 proc rmsdtt::draw_equiv {} {
   variable equiv_sw
   variable equiv_byres
@@ -1466,8 +1520,22 @@ proc rmsdtt::draw_equiv {} {
   
 
 proc rmsdtt::align {sel1 frame1 sel2} {
+  variable weighted_sw
+  variable weighted_mol
+  variable weighted_field
+
   $sel1 frame $frame1
-  set tmatrix [measure fit $sel1 $sel2]
+  if {$weighted_sw} {
+    set weights [[namespace current]::get_weights $sel1]
+    set tmatrix ""
+    if [catch { set tmatrix [measure fit $sel1 $sel2 weight $weights] } msg] {
+      set message "$msg\nFirst weights were (mol \"$weighted_mol\"; field \"$weighted_field\"):\n[lrange $weights 0 20]..."
+      showMessage $message
+      return -code return
+    }
+  } else {
+    set tmatrix [measure fit $sel1 $sel2]
+  }
   set move_sel [atomselect [$sel1 molid] "all" frame $frame1]
   $move_sel move $tmatrix
   return $tmatrix
@@ -2024,6 +2092,7 @@ proc rmsdtt::ctrlgui {} {
   variable equiv_byres
   variable equiv_atom
   variable noh
+  variable weighted_sw
 
   if {$traj_sw} {
     if {$traj_all} {
@@ -2071,11 +2140,13 @@ proc rmsdtt::ctrlgui {} {
       set swap_sw 0
       $w.top.left.swap.0 config -state disable
     }
+    $w.top.left.weighted.0 config -state disable
   } else {
     $w.top.right.pushfr.align config -state normal
     if {$swap_use} {
       $w.top.left.swap.0 config -state normal
     }
+    $w.top.left.weighted.0 config -state normal
   }
 
   if {$time_sw && $traj_sw} {
@@ -2134,6 +2205,19 @@ proc rmsdtt::ctrlgui {} {
     $w.top.left.equiv.atomlabel config -state disable
     $w.top.left.equiv.atom config -state disable
   }
+
+  if {[$w.top.left.weighted.0 cget -state] eq "normal" && $weighted_sw} {
+    $w.top.left.weighted.mollabel config -state normal
+    $w.top.left.weighted.mol config -state normal
+    $w.top.left.weighted.fieldlabel config -state normal
+    $w.top.left.weighted.field config -state normal
+    [namespace current]::update_weighted_mol
+  } else {
+    $w.top.left.weighted.mollabel config -state disable
+    $w.top.left.weighted.mol config -state disable
+    $w.top.left.weighted.fieldlabel config -state disable
+    $w.top.left.weighted.field config -state disable
+  }
 }
 
 
@@ -2172,7 +2256,25 @@ proc rmsdtt::update_swap_types {} {
   foreach t [lsort -unique $types] {
     $w.top.left.swap.type.menu add radiobutton -value $t -label $t -variable ::rmsdtt::swap_type
   }
+}
 
+
+proc rmsdtt::update_weighted_mol {} {
+  variable w
+  variable weighted_mol
+
+  $w.top.left.weighted.mol.menu delete 0 end
+  $w.top.left.weighted.mol.menu add radiobutton -value "ref" -label "ref" -variable [namespace current]::weighted_mol
+  $w.top.left.weighted.mol.menu add radiobutton -value "top" -label "top" -variable [namespace current]::weighted_mol
+  
+  set mollist [molinfo list]
+  if { [llength $mollist] != 0 } {
+    foreach id $mollist {
+      if {[molinfo $id get filetype] != "graphics"} {
+ 	$w.top.left.weighted.mol.menu add radiobutton -value $id -label "$id [molinfo $id get name]" -variable [namespace current]::weighted_mol
+      }
+    }
+  }
 }
 
 
