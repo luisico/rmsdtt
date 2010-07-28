@@ -8,5 +8,5 @@
 # script is sourced, the variable $dir must contain the
 # full path name of this file's directory.
 
-package ifneeded rmsdtt 2.5 [list source [file join $dir rmsdtt.tcl]]
+package ifneeded rmsdtt 3.0 "set env(RMSDTTDIR) [list $dir]; [list source [file join $dir rmsdtt.tcl]]"
 
