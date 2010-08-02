@@ -112,17 +112,17 @@ proc rmsdtt::rmsdtt {} {
 
   menubutton $w.menubar.options -text "Options" -menu $w.menubar.options.menu -underline 0 -pady 2
   menu $w.menubar.options.menu -tearoff no
+  $w.menubar.options.menu add cascade -label "Backbone def..." -menu $w.menubar.options.menu.bbdef -underline 0
+  menu $w.menubar.options.menu.bbdef
+  $w.menubar.options.menu.bbdef add radiobutton -label "C CA N" -variable [namespace current]::bb_def -value "C CA N"
+  $w.menubar.options.menu.bbdef add radiobutton -label "C CA N O" -variable [namespace current]::bb_def -value "C CA N O"
   $w.menubar.options.menu add cascade -label "Plotting program..." -menu $w.menubar.options.menu.plot -underline 0
   menu $w.menubar.options.menu.plot -tearoff no
   $w.menubar.options.menu.plot add radiobutton -label "Multiplot (all)" -variable [namespace current]::plot_program -value "multiplot" -underline 0
   $w.menubar.options.menu.plot add radiobutton -label "Xmgrace (Unix)" -variable [namespace current]::plot_program -value "xmgrace" -underline 0
   $w.menubar.options.menu.plot add radiobutton -label "MS Excel (Windows)" -variable [namespace current]::plot_program -value "excel" -underline 4
-  $w.menubar.options.menu add checkbutton -label "Colorize table" -variable [namespace current]::colorize -underline 0
-  $w.menubar.options.menu add cascade -label "Backbone def..." -menu $w.menubar.options.menu.bbdef -underline 0
-  menu $w.menubar.options.menu.bbdef
-  $w.menubar.options.menu.bbdef add radiobutton -label "C CA N" -variable [namespace current]::bb_def -value "C CA N"
-  $w.menubar.options.menu.bbdef add radiobutton -label "C CA N O" -variable [namespace current]::bb_def -value "C CA N O"
   $w.menubar.options.menu add checkbutton -label "Statistics" -variable [namespace current]::stats -underline 0
+  $w.menubar.options.menu add checkbutton -label "Colorize table" -variable [namespace current]::colorize -underline 0
   pack $w.menubar.options -side left
   
   menubutton $w.menubar.help -text "Help" -menu $w.menubar.help.menu -underline 0 -pady 2 
@@ -145,7 +145,7 @@ proc rmsdtt::rmsdtt {} {
 
   bind $w.top.left.sel <Return> "[namespace current]::draw_equiv"
 
-  labelframe $w.top.left.mods -text "Selection modifiers" -relief ridge -bd 2
+  labelframe $w.top.left.mods -text "Selection Modifiers" -relief ridge -bd 2
   pack $w.top.left.mods -side top -fill x
   checkbutton $w.top.left.mods.bb -text "Backbone" -variable [namespace current]::bb_only -command "[namespace current]::ctrlbb bb"
   checkbutton $w.top.left.mods.tr -text "Trace" -variable [namespace current]::trace_only -command "[namespace current]::ctrlbb trace"
@@ -156,7 +156,7 @@ proc rmsdtt::rmsdtt {} {
   pack $w.top.left.mods.selectionhistory -side right
 
   # Draw lines for equivalent atoms
-  labelframe $w.top.left.equiv -text "Draw equivalent atoms" -relief ridge -bd 2
+  labelframe $w.top.left.equiv -text "Equivalent Atoms" -relief ridge -bd 2
   pack $w.top.left.equiv -side top -fill x
 
   checkbutton $w.top.left.equiv.0 -text "On/Off" -variable [namespace current]::equiv_sw -command [namespace current]::draw_equiv
@@ -172,7 +172,7 @@ proc rmsdtt::rmsdtt {} {
     set swap_use 0
   }
   if {$swap_use} {
-    labelframe $w.top.left.swap -text "Swap atoms" -relief ridge -bd 2
+    labelframe $w.top.left.swap -text "Swap Atoms" -relief ridge -bd 2
     pack $w.top.left.swap -side top -fill x
     
     checkbutton $w.top.left.swap.0 -text "On/Off" -variable [namespace current]::swap_sw -command [namespace current]::ctrlgui
@@ -185,7 +185,7 @@ proc rmsdtt::rmsdtt {} {
   }
   
   # Weighted rmsd
-  labelframe $w.top.left.weighted -text "Weighted rmsd / align" -relief ridge -bd 2
+  labelframe $w.top.left.weighted -text "Weights" -relief ridge -bd 2
   pack $w.top.left.weighted -side top -fill x
 
   checkbutton $w.top.left.weighted.0 -text "On/Off" -variable [namespace current]::weighted_sw -command [namespace current]::ctrlgui
@@ -252,7 +252,7 @@ proc rmsdtt::rmsdtt {} {
   pack $w.top.right.traj.time -side top -fill x
 
   checkbutton $w.top.right.traj.time.0 -text "Time" -variable [namespace current]::time_sw -command [namespace current]::ctrlgui
-  label $w.top.right.traj.time.inilabel -text "Ini:"
+  label $w.top.right.traj.time.inilabel -text "Start:"
   entry $w.top.right.traj.time.inival -width 6 -textvariable [namespace current]::time_ini
   label $w.top.right.traj.time.steplabel -text "Step:"
   entry $w.top.right.traj.time.stepval -width 6 -textvariable [namespace current]::time_step
@@ -262,7 +262,7 @@ proc rmsdtt::rmsdtt {} {
   pack $w.top.right.traj.file -side top -fill x
 
   checkbutton $w.top.right.traj.file.plot -text "Plot" -variable [namespace current]::plot_sw
-  checkbutton $w.top.right.traj.file.0 -text "Save to file:" -variable [namespace current]::save_sw\
+  checkbutton $w.top.right.traj.file.0 -text "Save:" -variable [namespace current]::save_sw\
     -command [namespace code {
       if {$save_sw} {
 	$w.top.right.traj.file.name config -state normal
@@ -584,7 +584,8 @@ proc rmsdtt::doRmsd {} {
 
   #puts "DEBUG: ---------------------------------"
 
-  [namespace current]::ListHisotryPullDownMenu
+  # Add selection to history
+  [namespace current]::ListHistoryPullDownMenu
 }
 
 
@@ -801,6 +802,9 @@ proc rmsdtt::doAlign {} {
       $datalist($key) selection set $sel_index
     }
   }
+
+  # Add selection to history
+  [namespace current]::ListHistoryPullDownMenu
 }
 
 
@@ -1728,7 +1732,7 @@ proc rmsdtt::color_data { {colorize 0} } {
 
 
 
-proc rmsdtt::ListHisotryPullDownMenu {} {
+proc rmsdtt::ListHistoryPullDownMenu {} {
   variable w
   variable bb_only
   variable trace_only
