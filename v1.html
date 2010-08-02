@@ -1,0 +1,215 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">
+<HTML>
+<HEAD>
+  <LINK REL="stylesheet" HREF="http://physiology.med.cornell.edu/resources/physbio.css" TYPE="text/css">
+  <LINK REL="stylesheet" HREF="../vmd.css" TYPE="text/css">
+  <META HTTP-EQUIV="CONTENT-TYPE" CONTENT="text/html; charset=iso-8859-1">
+  <TITLE>VMD plugin RMSDTT</TITLE>
+  <META NAME="AUTHOR" CONTENT="Luis Gracia">
+</HEAD>
+<BODY LANG="en-US">
+
+<TABLE WIDTH=750 ALIGN=center>
+<TR><TD><A HREF="http://physiology.med.cornell.edu/"><IMG SRC="http://physiology.med.cornell.edu/images/header.jpg" BORDER=0 ALT="physiology"></A></TD></TR>
+<TR><TD>
+
+<H4><A HREF="../index.html">VMD plugins at WMC Physiology & Biophysics</A></H4>
+<H1>RMSDTT: RMSD Trajectory Tool</H1>
+
+<H2><A NAME="RMSDTT_description">Description</A></H2>
+
+<P>The RMSDTT plugin is an improvement to the <A HREF="http://www.ks.uiuc.edu/Research/vmd/plugins/rmsd/">RMSD Tool</A> plugin that can be found in the VMD distribution. The RMSDTT plugin adds support for rmsd calculations and alignment of trajectories, while retaining its old functionality. Two new options allow plotting of results via an external application, xmgrace (on unix systems) or Excel (on windows), and saving data to a file. The reference frame can also be specified.
+<UL>
+  <LI><A HREF="#RMSDTT_download">Version 1.7</A> added a new 'Trace' option and support for multi-line and comments in the atoms selection (see below).
+  <LI><A HREF="#RMSDTT_download">Version 1.8</A> adds support for Excel, new options to use time or frame as unit, and recovers the use of the average option for rmsd calculations of trajectories (not alignment). In this version, also a major change involves the use of the <EM>measure rmsd</EM> command instead of calculating the rmsd from scratch, and saves in memory usage.
+  <LI><A HREF="#RMSDTT_download">Version 1.9</A> adds partial support for <EM>all against all</EM> pairwise rmsd calculations. All frames will be compared against all frames in the trajectory. Support is only added for saving the data to a matrix, no plotting is supported at this time.
+  <LI><A HREF="#RMSDTT_download">Version 1.9.2.1</A> adds an option to exclude hydrogens from the atoms selection.
+  <LI><A HREF="#RMSDTT_last">Version 1.10</A> adds an option to skip frames.
+</UL>
+</P>
+
+<P><CENTER><IMG SRC="rmsdtt_1.9.png" NAME="rmsdtt" BORDER=0></CENTER></P>
+
+<P>In the previous figure the RMSD of trajectories md1 and md2 (200 frames each) is calculated with the xray as the reference (top molecule, 1 frame only). The <EM>RMSD Average</EM> are the mean for each trajectory, and the <EM>Overall Average RMSD</EM> is the mean of the three RMSD average values.</P>
+
+<P>New options and changes:</P>
+<UL>
+  <LI><P><B><EM>Trajectory</EM></B> activates the new plugin behavior. If not selected, the behavior is the same as with the <EM>RMSD Tool</EM> plugin.</P>
+  <LI><P><B><EM>Frame ref</EM></B> sets the frame of reference for the reference molecule (<B><EM>Top</EM></B> or <B><EM>Selected</EM></B>). Added in version 1.9 is the option to calculate <EM>all against all</EM> pairwise rmsd when activating <B><EM>all</EM></B>.</P>
+  <LI><P><B><EM>Skip</EM></B> allows skip frames in a regular fashion, starting from <B><EM>Ini</EM></B> and skipping every <B><EM>Steps</EM></B>. This feature was introduced in version 1.10.
+  <LI><P><B><EM>Time</EM></B> activates the use of time units (ps) has been introduced in version 1.8. <B><EM>Ini</EM></B> is the initial time, and <B><EM>Step</EM></B> in step size of each frame. This changes will be reflected in the plot and the output file.
+  <LI><P><B><EM>Plot</EM></B> will use <EM>xmgrace</EM> (on unix) or <EM>Excel</EM> (on windows, starting from version 1.8) to plot the data <EM>RMSD vs. frame</EM>. All xmgrace options and transformations can be used with the data; i.e. running averages, graph beautification, etc... VMD gives a warning message when exiting on windows systems if Excel is still open with data from VMD, but you still can continue using Excel. Xmgrace or Excel have to be installed on the system. Excel needs the tcom tcl library (see <A HREF="#RMSDTT_install">installation instructions</A>).</P>
+  <LI><P><B><EM>Save to file</EM></B> will save the data to the specified file. The format of the data is a table in which each row represents a frame and each column a molecule or trajectory. If the trajectories have differing numbers of frames, <EM>NA</EM> values are outputted. For example, the first frames in the previous example:</P>
+
+<CENTER><PRE>
+frame       xray        md1        md2
+    0  0.0000000  2.9420801  2.8631837
+    1         NA  1.3335457  1.2748098
+    2         NA  0.2971088  0.3996361
+    3         NA  0.3294190  0.4151645
+  ...        ...        ...        ...
+</PRE></CENTER>
+
+  <LI><P>The <B><EM>Align</EM></B> button will also work with trajectories; i.e. in the last example all 200 frames of md1 and md2 would be fit onto xray. Note that the <B><EM>RMSD</EM></B> button has to be pressed again to obtain the new RMSD values after the alignment. The average option will not work with the Align.</P>
+  <LI><P>The <B><EM>Average</EM></B> option will work for calculating the RMSD in version 1.8, but not the alignment.</P>
+  <LI><P>The <B><EM>Trace</EM></B> will add 'and name CA' to the actual atoms selection. Note that since version 1.7 <B><EM>Backbone</EM></B> has been changed from it's VMD default to 'and name C CA N' (O is not included). In version 1.9.2.1 option <B><EM>noh</EM></B> has been added to exclude hydrogens from the atoms selection.</P>
+<LI><P>The <B><EM>Multi-line atoms selection</EM></B> is a new and exciting feature introduced in version 1.7. The selection can now be split in different lines without affecting the final outcome. Also the character '#' can be used to comment out a portion of the selection, namely from the '#' to the end of that line (see figure above). Note also, that the record of an atoms selection in the <B><EM>history</EM></B> is not anymore done by pressing 'Return', but when pressing the 'RMSD' or 'Align' buttons.</P>
+</UL>
+
+<H2><A NAME="RMSDTT_download">Download</A></H2>
+
+Send a mail to the <A HREF="#RMSDTT_author">author</A> if you would like to be informed about new updates of this plugin.
+
+<TABLE WIDTH=650 CLASS="plugin">
+  <TR>
+    <TD CLASS="vertit"><B><A NAME="RMSDTT_last">version 1.10</A> (23 Jan'06)</B></TD>
+    <TD CLASS="verdown">[<A HREF="versions/rmsdtt-v1.10.tgz">download</A>]</TD>
+  </TR><TR>
+    <TD CLASS="verlog" COLSPAN=2>Change log:
+      <UL>
+	<LI> Bug in alignment code solved.
+      </UL>
+    </TD>
+  </TR>
+</TABLE>
+
+<TABLE WIDTH=650 CLASS="plugin">
+  <TR>
+    <TD CLASS="vertit"><B>version 1.9.2.2 (5 Aug'05)</B></TD>
+    <TD CLASS="verdown">[<A HREF="versions/rmsdtt-v1.9.2.2.tgz">download</A>]</TD>
+  </TR><TR>
+    <TD CLASS="verlog" COLSPAN=2>Change log:
+      <UL>
+	<LI> Bug in alignment code solved.
+      </UL>
+    </TD>
+  </TR>
+</TABLE>
+
+<TABLE WIDTH=650 CLASS="plugin">
+  <TR>
+    <TD CLASS="vertit"><B>version 1.9.2.1 (27 Jul'05)</B></TD>
+    <TD CLASS="verdown">[<A HREF="versions/rmsdtt-v1.9.2.1.tgz">download</A>]</TD>
+  </TR><TR>
+    <TD CLASS="verlog" COLSPAN=2>Change log:
+      <UL>
+	<LI> Added option for exclude hydrogens from the atoms selection.
+      </UL>
+    </TD>
+  </TR>
+</TABLE>
+
+<TABLE WIDTH=650 CLASS="plugin">
+  <TR>
+    <TD CLASS="vertit"><B>version 1.9 (6 Apr'05)</B></TD>
+    <TD CLASS="verdown">[<A HREF="versions/rmsdtt-v1.9.tgz">download</A>]</TD>
+  </TR><TR>
+    <TD CLASS="verlog" COLSPAN=2>Change log:
+      <UL>
+	<LI> Added option to calculate pairwise rmsd for all frames. If 'all' is selected, each frame of the selected (top,...) molecule will be used as reference. Changed procs compute_rms, saveData, doRmsd, ctrltraj and rmsdtt. Added checkbutton 'all'. Added proc saveDataAll.
+	<LI> Variable names changed: frames_ref to frame_ref, base to rmsd_base.
+	<LI> Other minor changes and bug-solving.
+      </UL>
+    </TD>
+  </TR>
+</TABLE>
+
+<TABLE WIDTH=650 CLASS="plugin">
+  <TR>
+    <TD CLASS="vertit"><B>version 1.8 (18 Jan'05)</B></TD>
+    <TD CLASS="verdown">[<A HREF="versions/rmsdtt-v1.8.tgz">download</A>]</TD>
+  </TR><TR>
+    <TD CLASS="verlog" COLSPAN=2>Change log:
+      <UL>
+	<LI> Change to use the VMD "measure rmsd" command instead of calculating the rmsd from scratch, except when using the average as reference.
+	<LI> Average option now works with trajectories for the rmsd button (not align).
+	<LI> Change order of some subroutines in the code.
+	<LI> Added option to show the results in time instead of frame.
+	<LI> Added option to plot the results in Excel when using Windows. Needs the tcom tcl library. VMD will complain upon exit if Excel is still open, but nothing else happens.
+      </UL>
+    </TD>
+  </TR>
+</TABLE>
+
+<TABLE WIDTH=650 CLASS="plugin">
+  <TR>
+    <TD CLASS="vertit"><B>version 1.7 (24 oct'04)</B></TD>
+    <TD CLASS="verdown">[<A HREF="versions/rmsdtt-v1.7.tgz">download</A>]</TD>
+  </TR><TR>
+    <TD CLASS="verlog" COLSPAN=2>Change log:
+      <UL>
+	<LI>'Backbone' option change to select atoms 'C CA N', which differs from VMD definition, and deactivated by default.
+	<LI>Added 'Trace' option. Will add 'and name CA' to the actual selection.
+	<LI>Multi-line selection text, with  added support for comments. Selection widget changed from entry to text.
+	<LI>New warning windows instead of  the console warning messages. Added procedure 'showMessage'.
+	<LI>More and improved warnings. 
+	<LI>Code split in procedures: onlyactive, doAlign, doRmsd.
+	<LI>Minor bugs.
+      </UL>
+    </TD>
+  </TR>
+</TABLE>
+
+<TABLE WIDTH=650 CLASS="plugin">
+  <TR>
+    <TD CLASS="vertit"><B>version 1.4 (20 Aug'04)</B></TD>
+    <TD CLASS="verdown">[<A HREF="versions/rmsdtt-v1.4.tgz">download</A>]</TD>
+  </TR><TR>
+    <TD CLASS="verlog" COLSPAN=2>Initial version.</TD>
+  </TR>
+</TABLE>
+
+<H2><A NAME="RMSDTT_install">Installation</A></H2>
+
+<OL>
+<LI><B>Download</B> the plugin from <A HREF="#RMSDTT_download">here</A> to the directory where you store your VMD plugins. Skip to point <B>4</B> if you are updating the plugin.
+<LI>Add the following line to a file called <B><EM>pkgIndex.tcl</EM></B> in the same directory as the plugin (create it if it does not exists, or get it from <A HREF="versions/1.9.2.2/pkgIndex.tcl">here</A>):</P>
+<PRE>package ifneeded rmsdtt 1.0 [list source [file join $dir rmsdtt.tcl]]</PRE>
+<LI>Add the following to your <B><EM>.vmdrc</EM></B> startup file (or create one) (for unix the path should be <EM>$HOME/.vmdrc</EM>, and for windows <EM>%USERPROFILE%\vmd.rc</EM>):
+  <OL type="a">
+  <LI><B>For VMD 1.8.3 and up</B>
+<PRE>
+lappend auto_path {/path/to/your/plugins/directory}
+vmd_install_extension rmsdtt rmsdtt_tk_cb "WMC PhysBio/RMSDTT"
+</PRE>
+  <LI><B>For VMD 1.8.2 and down</B>
+<PRE>
+lappend auto_path {/path/to/your/plugins/directory}
+if { [catch "package require rmsdtt" msg] } {
+  puts "VMD RMSDTT package could not be loaded:\n$msg"
+} elseif { [catch {menu tk register "rmsdtt" rmsdtt} msg] } {
+  puts "VMD RMSDTT could not be started:\n$msg"
+}
+</PRE>
+  </OL>
+<P>Remember to correct the path to your plugins directory; i.e, if you saved the plugin in <EM>/home/user/myplugins</EM>, write that same path in the <EM>auto_path</EM> line.
+<P><B>Note:</B> If you created the <EM>.vmdrc</EM> file, remember to add <B><EM>menu main on</EM></B> to get the main menu back.</P>
+<LI><B>Excel on Windows</B> needs the <EM>tcom tcl library</EM>. Skip this step if you use unix. <A HREF="http://www.vex.net/~cthuang/tcom/">Download</A> the library and install it (i.e. in your plugins directories). In general, only the <EM>tcom/lib/tcom</EM> directory is needed. Then add the following to your vmd.rc file:
+<PRE>
+lappend auto_path {/path/to/tcom/lib/tcom}
+if { [catch "package require tcom" msg] } {
+  puts "VMD tcom package could not be loaded:\n$msg"
+}
+</PRE>
+<LI><B>Start</B> VMD. The RMSDTT plugin should be accessible from the <EM>Extensions menu</EM>.
+</OL>
+
+<H2><A NAME="RMSDTT_author">Author</A></H2>
+
+<P>This plugin is based on the code of the <EM>RMSD Tool</EM> plugin, with modifications to some of its subroutines.</P>
+<P>Send comments and feedback to <A HREF="mailto:lug2002@med.cornell.edu">Luis Gracia</A>.</P>
+
+</TD></TR>
+
+<TR><TD CLASS="footer">Copyright &copy; 2004-2008, Weill Cornell Medical College. All Rights Reserved</TD></TR>
+
+<TR><TD CLASS="address">
+<ADDRESS>
+<A HREF="mailto:lug2002@med.cornell.edu">Luis Gracia</A>
+| last updated: Tuesday, February 4 2008
+<!--#config  timefmt="%A %e/%m/%y"--><!--#echo var="LAST_MODIFIED"-->
+</ADDRESS>
+</TD></TR>
+
+</BODY>
+</HTML>

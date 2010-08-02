@@ -1,0 +1,17 @@
+<?xml version="1.0" ?>
+<rss version="2.0">
+  <channel>
+    <title>RMSDTT plugin</title>
+    <link>http://physiology.med.cornell.edu/faculty/hweinstein/vmdplugins/rmsdtt</link>
+    <description>VMD plugin for rmsd calculations and alignment of trajectories</description>
+    <language>en-us</language>
+    <managingEditor>lug2002@med.cornell.edu (Luis Gracia)</managingEditor>
+  </channel>
+  <item>
+    <title>New version 3.0 available</title>
+    <link>http://physiology.med.cornell.edu/faculty/hweinstein/vmdplugins/rmsdtt</link>
+    <description>Version 3.0 of the RMSDTT plugin is now available. This version adds options to highlight equivalent atoms in the selection and to do weighted rmsd and alignment.</description>
+    <pubDate>Thu, 5 Aug 2010 12:00:00 EST</pubDate>
+    <guid>http://physiology.med.cornell.edu/faculty/hweinstein/vmdplugins/rmsdtt/rssitem1</guid>
+  </item>
+</rss> 
