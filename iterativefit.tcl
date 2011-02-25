@@ -57,7 +57,7 @@ proc rmsdtt::iterativeFitGUI {} {
   label $w.ifit.row1.factorlabel -text "Factor:"
   menubutton $w.ifit.row1.type -textvariable [namespace current]::ifit_type -menu $w.ifit.row1.type.menu -relief raised -direction flush -width 6
   menu $w.ifit.row1.type.menu -tearoff no
-  foreach type [list exp expmin minmax gaussian] {
+  foreach type [list linear exp expmin minmax gaussian] {
     $w.ifit.row1.type.menu add radiobutton -label $type -variable [namespace current]::ifit_type -value $type
   }
   entry $w.ifit.row1.factor -width 4 -textvariable [namespace current]::ifit_factor
@@ -227,17 +227,23 @@ proc rmsdtt::iterativeFit {} {
   puts "Signal every $signalstep steps"
 
   if {$fast} {
-    puts -nonewline "Trying fast algorithm...   "
+    puts "Testing for fast algorithm..."
     if [catch { set ret [measure rmsd $sel_ref([lindex $target_mol 0]) $sel_ref([lindex $target_mol 0]) byatom] } msg] {
-      puts "hacked VMD not found!"
+      puts "   :-( Hacked VMD not found! Please contact the RMSDTT developer"
       set fast 0
+    } else {
+      puts "   :-) Hacked VMD found"
     }
+
     if [catch {package require BLT} msg] {
-      puts "package BLT is not available"
+      puts "   :-( Package BLT not found. Please install BLT for you Tcl/Tk version first"
       set fast 0
+    } else {
+      puts "   :-) Package BLT found"
     }
+
     if {$fast} {
-      puts "nice!!!"
+      puts "   Nice, you got it all to run at light speed!"
       
       # Delete residue objects
       foreach mol $target_mol  {
@@ -252,7 +258,7 @@ proc rmsdtt::iterativeFit {} {
     }
   } else {
     set ifit_convsw 0
-      puts "Switching Convergence off."
+    puts "Switching Convergence off."
   }
 
   # Check number of residues
@@ -338,14 +344,10 @@ proc rmsdtt::iterativeFit {} {
 
   # Initizalize rmsd by residue and weights
   if {$fast} {
-    ::blt::vector create zeros
-    zeros set 0.0
-    for {set res 1} {$res < $nresidues} {incr res} {
-      zeros append 0.0
-    }
-    ::blt::vector create weights
+    ::blt::vector create zeros($nresidues)
+    ::blt::vector create weights($nresidues)
     weights expr {zeros + 1.0}
-    ::blt::vector create temp
+    zeros dup temp
   } else {
     for {set res 0} {$res < $nresidues} {incr res} {
       lappend rmsd_mean 0.0
@@ -402,7 +404,7 @@ proc rmsdtt::iterativeFit {} {
 	      if {$fast} {
 		$sel_move($mol2) move [measure fit $sel_current($mol2) $sel_reference weight [weights range 0 end]]
 		lassign [measure rmsd $sel_reference $sel_current($mol2) byatom] global_rmsd ifit_rmsd
-		puts "$j $l $ifit_rmsd"
+		#puts "$j $l $ifit_rmsd"
 		temp set $ifit_rmsd
 		rmsd_mean set [rmsd_mean + temp]
 		
@@ -421,26 +423,29 @@ proc rmsdtt::iterativeFit {} {
       if {$fast} {
 	# Compute mean, mix and max
 	rmsd_mean set [rmsd_mean / $count]
-	set rmsd_min $rmsd_mean(min)
-	set rmsd_max $rmsd_mean(max)
+	set rmsd_min [set [namespace current]::rmsd_mean(min)]
+	set rmsd_max [set [namespace current]::rmsd_mean(max)]
 	
 	# Compute weights
 	switch $ifit_type {
+          linear {
+            weights expr { $ifit_factor * rmsd_mean }
+          }
 	  exp {
 	    weights expr { exp(-$ifit_factor * rmsd_mean) }
 	  }
 	  expmin {
-	    weights expr { exp(-$ifit_factor*( rmsd_mean - $rmsd_min)) }
+	    weights expr { exp(-$ifit_factor * ( rmsd_mean - $rmsd_min)) }
 	  }
 	  minmax {
 	    if {$rmsd_max == $rmsd_min} {#!!!!!!!!!!!!!!!!
 	      set weight 1
 	    } else { 
-	      weights expr { ($rmsd_max- rmsd_mean) / ($rmsd_max-$rmsd_min) }
+	      weights expr { ($rmsd_max - rmsd_mean) / ($rmsd_max - $rmsd_min) }
 	    }
 	  }
 	  gaussian {
-	    weights expr { exp(-( rmsd_mean * rmsd_mean )/$ifit_factor) }
+	    weights expr { exp(-(rmsd_mean * rmsd_mean) / $ifit_factor) }
 	  }
 	}
 	
@@ -488,7 +493,6 @@ proc rmsdtt::iterativeFit {} {
 	  }
 	  set conv $t
 	}
-	puts ""
 	
       } else { # not fast
 	if {$plot_use} {
@@ -514,6 +518,9 @@ proc rmsdtt::iterativeFit {} {
 	for {set res 0} {$res < $nresidues} {incr res} {
 	  set r [lindex $rmsd_mean $res]
 	  switch $ifit_type {
+            linear {
+              set weight [expr {$ifit_factor*$r}]
+            }
 	    exp {
 	      set weight [expr {exp(-$ifit_factor*$r)}]
 	    }
@@ -562,7 +569,10 @@ proc rmsdtt::iterativeFit {} {
       }
       
       incr iter
+      puts ""
     }
+
+    puts "Done with fitting"
     
     # Update atom properties
     if {$fast} {
