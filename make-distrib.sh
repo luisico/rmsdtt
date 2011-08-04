@@ -16,8 +16,9 @@ doc
 
 # re-arrange documentation
 mkdir doc
-cp index.html rmsdtt_3.0.png doc
-wget -q -O doc/vmdbackup.css http://physiology.med.cornell.edu/resources/physbio.css http://physiology.med.cornell.edu/faculty/hweinstein/vmdplugins/vmd.css
+sed -e "/html5-reset\.css/d" -e "/vmd\.css/d" index.html > doc/index.html
+cp rmsdtt_3.0.png doc
+cat ../html5-reset.css ../vmd.css > doc/$plugin.css
 chmod -R ugo+rX doc
 
 # Build list of files
@@ -36,5 +37,6 @@ mv $tar $dir/versions
 chmod 644 $dir/versions/$tar
 cd $dir
 
+# Clean
 rm -rf doc
 
