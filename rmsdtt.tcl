@@ -1,5 +1,5 @@
 #
-#             RMSD Trajectory Tool v2.5
+#             RMSD Trajectory Tool v3.0
 #
 # A GUI interface for RMSD alignment and analysis of trajectories
 #
