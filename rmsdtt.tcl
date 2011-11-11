@@ -285,7 +285,7 @@ proc rmsdtt::rmsdtt {} {
   grid columnconfigure $w.data 1 -weight 1
   grid rowconfigure $w.data 1 -weight 1
 
-  label $w.data.header_id  -text "id"  -width 2  -relief sunken
+  label $w.data.header_id  -text "id"  -width 4  -relief sunken
   label $w.data.header_mol -text "mol" -width 30 -relief sunken
   label $w.data.header_avg -text "avg" -width 7  -relief sunken
   label $w.data.header_sd  -text "sd"  -width 7  -relief sunken
@@ -300,7 +300,7 @@ proc rmsdtt::rmsdtt {} {
   grid $w.data.header_max -column 5 -row 0
   grid $w.data.header_num -column 6 -row 0
   
-  set datalist(id)  [listbox $w.data.body_id  -height 10 -width 2  -relief sunken -exportselection 0 -yscrollcommand [namespace current]::data_yset -selectmode extended]
+  set datalist(id)  [listbox $w.data.body_id  -height 10 -width 4  -relief sunken -exportselection 0 -yscrollcommand [namespace current]::data_yset -selectmode extended]
   set datalist(mol) [listbox $w.data.body_mol -height 10 -width 30 -relief sunken -exportselection 0 -yscrollcommand [namespace current]::data_yset -selectmode extended]
   set datalist(avg) [listbox $w.data.body_avg -height 10 -width 7  -relief sunken -exportselection 0 -yscrollcommand [namespace current]::data_yset -selectmode extended]
   set datalist(sd)  [listbox $w.data.body_sd  -height 10 -width 7  -relief sunken -exportselection 0 -yscrollcommand [namespace current]::data_yset -selectmode extended]
@@ -319,7 +319,7 @@ proc rmsdtt::rmsdtt {} {
     bind $w.data.body_$key <<ListboxSelect>> "[namespace current]::multiple_sel %W"
   }
 
-  label $w.data.footer_id  -text ""                                        -width 2  -anchor e -relief sunken
+  label $w.data.footer_id  -text ""                                        -width 4  -anchor e -relief sunken
   label $w.data.footer_mol -text "Overall:"                                -width 30 -anchor e -relief sunken
   label $w.data.footer_avg -textvariable [namespace current]::datatot(avg) -width 7  -anchor e -relief sunken
   label $w.data.footer_sd  -textvariable [namespace current]::datatot(sd)  -width 7  -anchor e -relief sunken
@@ -1057,9 +1057,9 @@ proc rmsdtt::saveSummary { file } {
   }
 
   # Header
-  set output [format "%3s  %-25s  %8s  %8s  %8s  %8s  %4s\n" id mol avg sd min max num]
+  set output [format "%4s  %-25s  %8s  %8s  %8s  %8s  %4s\n" id mol avg sd min max num]
   for {set i 0} {$i < [$datalist(id) size]} {incr i} {
-    append output [format "%3d  %-25s  %8.3f  %8.3f  %8.3f  %8.3f  %4d\n" [$datalist(id) get $i] \
+    append output [format "%4d  %-25s  %8.3f  %8.3f  %8.3f  %8.3f  %4d\n" [$datalist(id) get $i] \
 		     [$datalist(mol) get $i] [$datalist(avg) get $i] [$datalist(sd) get $i] \
 		     [$datalist(min) get $i] [$datalist(max) get $i] [$datalist(num) get $i]
 		  ]
