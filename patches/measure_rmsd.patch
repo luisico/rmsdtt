@@ -1,0 +1,291 @@
+diff -Nuar vmd-1.9.2a6/Measure.C src/Measure.C
+--- vmd-1.9.2a6/Measure.C	2012-03-23 15:25:47.000000000 -0400
++++ src/Measure.C	2012-03-23 15:31:23.000000000 -0400
+@@ -522,7 +522,8 @@
+ //    sqrt(sum(weight(n) * sqr(r1(i(n))-r2(i(n))))/sum(weight(n)) / N
+ int measure_rmsd(const AtomSel *sel1, const AtomSel *sel2,
+                  int num, const float *framepos1, const float *framepos2,
+-                 float *weight, float *rmsd) {
++                 float *weight, float *rmsd,
++                 int byflag, const int *residues, float *byrmsd) {
+   if (!sel1 || !sel2)   return MEASURE_ERR_NOSEL;
+   if (sel1->selected < 1 || sel2->selected < 1) return MEASURE_ERR_NOSEL;
+   if (!weight || !rmsd) return MEASURE_ERR_NOWEIGHT;
+@@ -550,8 +551,15 @@
+ 
+   *rmsd = 10000000; // if we bail out, return a huge value
+ 
++  float *byatom = new float[sel1->selected];
++  float *byres  = new float[sel1->selected];
++  float tmp_r;
++  int byres_idx = -1;
++  float byres_w = 0;
++
+   // compute the rmsd
+   int count = sel1->selected;
++  int byatom_idx = 0;
+   while (count-- > 0) {
+     // find next 'on' atom in sel1 and sel2
+     // loop is safe since we already stop the on count > 0 above
+@@ -568,14 +576,51 @@
+     }
+ 
+     // sum the calculated rmsd and weight values
+-    rmsdsum += tmp_w * distance2(framepos1 + 3*sel1ind, framepos2 + 3*sel2ind);
++    // rmsd by atom
++    byatom[byatom_idx] = distance2(framepos1 + 3*sel1ind, framepos2 + 3*sel2ind);
++    tmp_r = tmp_w * byatom[byatom_idx];
++    if (byflag == 1) {
++      byrmsd[byatom_idx] = sqrtf(byatom[byatom_idx]);
++      //msgInfo << "byatom " << byatom_idx << " " << byrmsd[byatom_idx] << sendmsg;
++    }
++    
++    // rmsd by residue
++    if (byflag == 2) {
++      //msgInfo << "res " << sel1ind << " " << byres_idx << sendmsg;
++      if (residues[sel1ind] == 1) {
++	// Finalize last residue
++	if (byres_idx >= 0) {
++	  byrmsd[byres_idx] = sqrtf(byres[byres_idx] / byres_w);
++	  //msgInfo << "byres " << byres_idx << " " << byrmsd[byres_idx] << sendmsg;
++	}
++	// Initialize new residue
++	byres_idx++;
++	byres[byres_idx] = 0;
++	byres_w = 0;
++      }
++      byres[byres_idx] += byatom[byatom_idx];
++      byres_w += tmp_w;
++    }
++    
++    // rmsd total
++    rmsdsum += byatom[byatom_idx];
+     wsum += tmp_w;
+ 
+     // and advance to the next atom pair
+     sel1ind++;
+     sel2ind++;
++    byatom_idx++;
++  }
++
++  // Finalize last residue
++  if (byflag == 2) {
++    byrmsd[byres_idx] = sqrtf(byres[byres_idx] / byres_w);
++    //msgInfo << "byres " << byres_idx << " " << byrmsd[byres_idx] << sendmsg;
+   }
+ 
++  delete [] byatom;
++  delete [] byres;
++
+   // check weight sum
+   if (wsum == 0) {
+     return MEASURE_ERR_BADWEIGHTSUM;
+@@ -583,6 +628,7 @@
+ 
+   // finish the rmsd calcs
+   *rmsd = sqrtf(rmsdsum / wsum);
++  //msgInfo << "rmsd " << *rmsd << sendmsg;
+ 
+   return MEASURE_NOERR; // and say rmsd is OK
+ }
+diff -Nuar vmd-1.9.2a6/MeasureCluster.C src/MeasureCluster.C
+--- vmd-1.9.2a6/MeasureCluster.C	2012-03-23 15:25:47.000000000 -0400
++++ src/MeasureCluster.C	2011-08-01 13:37:49.000000000 -0400
+@@ -370,7 +370,8 @@
+ static float cluster_get_rmsd(const float *Frame1Pos, const float *Frame2Pos, 
+                               AtomSel *sel, float *weights) {
+   float distance = 0.0f;
+-  measure_rmsd(sel, sel, sel->num_atoms, Frame1Pos, Frame2Pos, weights, &distance);
++  measure_rmsd(sel, sel, sel->num_atoms, Frame1Pos, Frame2Pos, weights, &distance,
++               0, NULL, NULL);
+   return distance;
+ }
+ 
+diff -Nuar vmd-1.9.2a6/Measure.h src/Measure.h
+--- vmd-1.9.2a6/Measure.h	2012-03-23 15:25:47.000000000 -0400
++++ src/Measure.h	2011-08-01 13:30:43.000000000 -0400
+@@ -124,7 +124,8 @@
+ // measure_fit.  
+ extern int measure_rmsd(const AtomSel *sel1, const AtomSel *sel2,
+                         int num, const float *f1, const float *f2,
+-                        float *weight, float *rmsd);
++                        float *weight, float *rmsd,
++                        int byflag, const int *residues, float *byrmsd);
+ 
+ // Calculate RMS fluctuation of selected atoms over selected frames
+ extern int measure_rmsf(const AtomSel *sel, MoleculeList *mlist, 
+diff -Nuar vmd-1.9.2a6/py_atomsel.C src/py_atomsel.C
+--- vmd-1.9.2a6/py_atomsel.C	2012-03-23 15:25:47.000000000 -0400
++++ src/py_atomsel.C	2012-03-23 15:40:43.000000000 -0400
+@@ -766,10 +766,15 @@
+   if (!weight) return NULL;
+ 
+   float rmsd;
++  int byflag = 0;
++  int *residues = new int[a->atomSel->selected];
++  float *byrmsd = new float[a->atomSel->selected];
+   int rc = measure_rmsd(a->atomSel, sel2, a->atomSel->selected,
+       a->atomSel->coordinates(a->app->moleculeList), 
+       sel2->coordinates(a->app->moleculeList), 
+-      weight, &rmsd);
++      weight, &rmsd, byflag, residues, byrmsd);
++  delete [] residues;
++  delete [] byrmsd;
+   delete [] weight;
+   if (rc < 0) {
+     PyErr_SetString(PyExc_ValueError, measure_error(rc));
+diff -Nuar vmd-1.9.2a6/py_atomselection.C src/py_atomselection.C
+--- vmd-1.9.2a6/py_atomselection.C	2012-03-23 15:25:47.000000000 -0400
++++ src/py_atomselection.C	2012-03-23 15:41:36.000000000 -0400
+@@ -715,10 +715,15 @@
+     return NULL;
+   }
+   float rmsd;
++  int byflag = 0;
++  int *residues = new int[sel1->selected];
++  float *byrmsd = new float[sel1->selected];
+   int rc = measure_rmsd(sel1, sel2, sel1->selected, ts1->pos, ts2->pos,
+-      weight, &rmsd);
++      weight, &rmsd, byflag, residues, byrmsd);
+   delete sel1;
+   delete sel2;
++  delete [] residues;
++  delete [] byrmsd;
+   delete [] weight;
+   if (rc < 0) {
+     PyErr_SetString(PyExc_ValueError, measure_error(rc));
+diff -Nuar vmd-1.9.2a6/TclMeasure.C src/TclMeasure.C
+--- vmd-1.9.2a6/TclMeasure.C	2012-03-23 15:25:47.000000000 -0400
++++ src/TclMeasure.C	2012-03-23 15:38:26.000000000 -0400
+@@ -969,9 +969,9 @@
+ */
+ static int vmd_measure_rmsd(VMDApp *app, int argc, Tcl_Obj * const objv[], Tcl_Interp *interp)
+ {
+-  if (argc !=3 && argc != 5) {
++  if (argc < 3 || argc > 6) {
+     Tcl_WrongNumArgs(interp, 2, objv-1, 
+-      (char *)"<sel1> <sel2> [weight <weights>]");
++      (char *)"<selection1> <selection2> ?byatom ?byres ?weight <weightstring>?");
+     return TCL_ERROR;
+   }
+   // get the selections
+@@ -990,13 +990,34 @@
+     Tcl_AppendResult(interp, "measure rmsd: no atoms selected", NULL);
+     return TCL_ERROR;
+   }
++
++  // byres and byatom cannot be combined, byatom wins
++  int i;
++  int byflag = 0;
++  int weight_flag = 0;
++  for (i=3; i<argc; i++) {
++    if (i == weight_flag)
++      continue;
++    char *argvcur = Tcl_GetStringFromObj(objv[i],NULL);
++    if (!strupncmp(argvcur, "weight", CMDLEN)) {
++      weight_flag = i+1;
++    } else if (!strupncmp(argvcur, "byres", CMDLEN)) {
++      byflag = 2;
++    } else if (!strupncmp(argvcur, "byatom", CMDLEN)) {
++      byflag = 1;
++    } else {
++      Tcl_AppendResult(interp, "measure rmsd: invalid syntax, no such keyword: ", argvcur, NULL);
++      return TCL_ERROR;
++    }
++  }
++
+   float *weight = new float[sel1->selected];
+   {
+     int ret_val;
+-    if (argc == 3) {
+-      ret_val = tcl_get_weights(interp, app, sel1, NULL, weight);
++    if (weight_flag) {
++      ret_val = tcl_get_weights(interp, app, sel1, objv[weight_flag], weight);
+     } else {
+-      ret_val = tcl_get_weights(interp, app, sel1, objv[4], weight);
++      ret_val = tcl_get_weights(interp, app, sel1, NULL, weight);
+     }
+     if (ret_val < 0) {
+       Tcl_AppendResult(interp, "measure rmsd: ", measure_error(ret_val),
+@@ -1005,6 +1026,35 @@
+       return TCL_ERROR;
+     }
+   }
++
++  // Get the residue indices (assummes residues are same in both selections)
++  int *residues = new int[sel1->num_atoms];
++  int nresidues = 0;
++  if (byflag == 2) {
++    SymbolTable *atomSelParser = app->atomSelParser;
++    atomsel_ctxt context(atomSelParser, 
++			 app->moleculeList->mol_from_id(sel1->molid()), 
++			 sel1->which_frame, NULL);
++    int fctn = atomSelParser->find_attribute("residue");
++    int *tmp_data = new int[sel1->num_atoms];
++    atomSelParser->fctns.data(fctn)->keyword_int(
++      &context, sel1->num_atoms,tmp_data, sel1->on);
++    int last=-1;
++    for (i=0; i<sel1->num_atoms; i++) {
++      if (sel1->on[i]) {
++	//msgInfo << i << " " << tmp_data[i] << " " << last << " ";
++	if (last != tmp_data[i]) {
++	  residues[i] = 1;
++	  last = tmp_data[i];
++	  nresidues++;
++	} else {
++	  residues[i] = 0;
++	}
++      }
++    }
++    delete [] tmp_data;
++  }
++
+   // compute the rmsd
+   {
+     float rmsd = 0;
+@@ -1012,16 +1062,43 @@
+     const float *y = sel2->coordinates(app->moleculeList);
+     if (!x || !y) {
+       delete [] weight;
++      delete [] residues;
+       return TCL_ERROR;
+     }
+-    int ret_val = measure_rmsd(sel1, sel2, sel1->selected, x, y, weight, &rmsd);
++    float *byrmsd = new float[sel1->selected];
++    int ret_val = measure_rmsd(sel1, sel2, sel1->selected, x, y, weight, &rmsd, byflag, residues, byrmsd);
+     delete [] weight;
++    delete [] residues;
+     if (ret_val < 0) {
+       Tcl_AppendResult(interp, "measure rmsd: ", measure_error(ret_val),
+ 		       NULL);
+       return TCL_ERROR;
+     }
+-    Tcl_SetObjResult(interp, Tcl_NewDoubleObj(rmsd));
++
++    // Results by atom or by residue
++    if (byflag) {
++      Tcl_Obj *tcl_result = Tcl_NewListObj(0, NULL);
++      Tcl_ListObjAppendElement(interp, tcl_result, Tcl_NewDoubleObj(rmsd));
++      
++      Tcl_Obj *list_byrmsd = Tcl_NewListObj(0, NULL);
++      if (byflag == 1) {
++	for (i=0; i<sel1->selected; i++) {
++	  Tcl_ListObjAppendElement(interp, list_byrmsd, Tcl_NewDoubleObj(byrmsd[i]));
++	}
++      } else {
++	for (i=0; i<nresidues; i++) {
++	  Tcl_ListObjAppendElement(interp, list_byrmsd, Tcl_NewDoubleObj(byrmsd[i]));
++	}
++      }
++      Tcl_ListObjAppendElement(interp, tcl_result, list_byrmsd);
++      
++      Tcl_SetObjResult(interp, tcl_result);
++    } else {
++      
++      // Results total
++      Tcl_SetObjResult(interp, Tcl_NewDoubleObj(rmsd));
++    }
++    delete [] byrmsd;
+   }
+   return TCL_OK;
+ }

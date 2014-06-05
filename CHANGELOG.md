@@ -1,4 +1,8 @@
-### 3.0.1 (2014-06-05)
+### 4.0.0 (2014-06-04)
+
+* Publicly release iterative fitting
+
+### 3.0.1 (2014-06-04)
 
 * Move code to github
 

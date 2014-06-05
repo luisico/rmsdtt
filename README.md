@@ -18,7 +18,7 @@ RMSDTT is distributed as part of VMD (RMSDTT 3.0 since version 1.8.8, RMSDTT 2.0
 
 As an example, the following figure shows the use of RMSDTT to calculate the rmsd of a single frame structure (*min*) and two trajectories (*equil* and *md*) with the *xray* structure as reference (*top* molecule). The trace (CA atoms) of the whole protein is used for the calculation. Note how lines can be commented in the atom selection box. Statistics for each molecule/trajectory and totals are shown in the table. In addition a plot was requested (plot not shown).
 
-![RMSDTT GUI](rmsdtt_2.0.png)
+![RMSDTT GUI](rmsdtt_4.0.png)
 
 ## Installation
 
@@ -28,7 +28,7 @@ A small guide on how to install third party VMD plugins can be found [here](http
 2. Clone or download the project into a subdirectory of your *VMD plugins' directory* (ie. `/path/to/plugins/directory/rmsdtt`):
 ```sh
 cd /path/to/plugins/directory
-git clone git_url rmsdtt
+git clone https://github.com/luisico/rmsdtt.git rmsdtt
 ```
 3. Add the following to your *$HOME/.vmdrc* file (if you followed the instructions in the link above, you might already have the first line present):
 ```tcl
@@ -84,7 +84,7 @@ This option tries to swap equivalent atoms to reduce the rmsd. Sets of equivalen
 Calculated a weighted rmsd or alignment using weights for each atom in the selection. Weight can be taken from different fields stored in one of the molecules:
 
 * **Mol** will select the molecule storing the weights. *Ref* is the current molecule selected as reference (see below).
-* **Field** will select the field storing the weights. Five fields can be used: *user*, *mass*, *charge*, *beta*, *occupancy*. Some are filled by VMD when loading the molecule, while others can be inputed using tcl.
+* **Field** will select the field storing the weights. Five fields can be used: *user*, *mass*, *charge*, *beta*, *occupancy*. Some are filled by VMD when loading the molecule, while others can be input using tcl.
 
 ### Calculation Type
 
@@ -121,6 +121,63 @@ Include frames from trajectories of one or more molecules in the rmsd or alignme
       ...    ...    ...    ...           ...        ...   ...    ...    ...
 ```
 
+### Iterative Fitting by residue
+
+This section does an iterative fitting similar to that proposed by [Damm and Carlson](http://www.ncbi.nlm.nih.gov/pubmed/16565070) to make a biased fitting towards the common rigid regions among all the structures. In each iteration we first do a weighted fit of the selected atoms of all structures/conformations onto all other structures/conformations. The by-residue RMSD is then calculated for each fitted pair. Next, the average RMSD by-residue is calculated over all fitted pairs and converted into weights using the selected function. Weights obtained this way are fed in the next iteration.
+
+An experimental clustering option is also included. Three distance metrics are calculated for each pair of structures/conformations: *rms* is the standard rmsd between conformations, *rmsw* is the standard weighted rmsd between conformations, and *lrmsw* is a special weighted function:
+```
+Dj = SUM(Wi * RMSDij) j=1...fitted pairs
+```
+where *Dj* is the distance metric for the fitted pair *j*, *RMSDij* is the RMSD of residue *i* in the fitted pair *j*, and *Wi* is the weight of residue *i* obtained in the last step of the iterative fitting, and the sum is over all residues of the protein.
+
+The iterative fitting and cluster functions are very slow due to the number of calculations needed. But it can be accelerated by a hacked VMD and the tcl *tensor* package (see below).
+
+The following options are available:
+* **Fit** will start the iterative fitting.
+  * **Iters**: number of iterations
+  * **Factor**: function and factor used after each iteration to compute the new weights by residue. For each residue new weights are calculated based on one of the following formulas, where `factor` is the factor entered in the GUI, and `rmsd_mean_res` is the mean rmsd obtain during that iterations for a residue:
+    * **linear**: `factor * rmsd_mean_res`
+    * **exp**: `exp(-factor * rmsd_mean_res)`
+    * **expmin**: `exp(-factor * (rmsd_mean_res - rmsd_global_min))`
+    * **minmax**: `(rmsd_global_max - rsmd_mean_by_res) / (rmsd_global_max - rmsd_global_min)`
+    * **gaussian**: ` exp(-(rmsd_mean_res^2) / factor)`
+  * **Convergence**: can be used to stop the fitting before all iterations have completed. It represents the difference in weight change between iterations.
+* **Plot**: check to get plot of rmsd by residue for each iteration.
+* **Save**: check to save the results to file.
+* **Rep**: check to display the results graphically in the main VMD window. You need to specify the atoms to represent, they don't need to be the same used in the fitting.
+  * **replace**: reuse the same VMD representation for iterative fitting instead of creating a new one.
+  * **Style**: select the style to use in the VMD representation.
+  * **Scale**: select the color scale for the weights.
+  * **all frames**: show all frames in the molecule.
+* **Update**: update the representation (ie. weight scale) as iterations progress.
+* **cluster**: do clustering of conformations based on the weights by residue.
+  * **cluster fit**: fit structures before calculating the distance metric for each pair residues.
+  * **cluster only**: do clustering based on current weights without running an iterative fitting.
+  * **weights from**: use weights from this molecule (field user) when *cluster only* is selected.
+
+#### Hacking *measure rmsd* in VMD
+A patch for VMD can be found in [patches](patches). You will need to recompile VMD. It is compatible with the standard *measure rmsd* command, and adds two options:
+  - *byres*: will return an array with all the rmsd by residue in the selection after the global rmsd.
+  - *byatom*: will return an array with all the rmsd by atom in the selection after the global rmsd.
+
+For example:
+```tcl
+lassign [measure rmsd $sel1 $sel2 byres] rmsd_global rmsd_byres
+
+```
+
+#### Using tcl package *tensor*
+To make it available to vmd, download the package from http://web.eecs.umich.edu/~mckay/computer and install it. Assuming */path/to/your/vmdplugins* has been included in your *.vmdrc* autoload path:
+```sh
+cd /path/to/your/vmdplugins
+wget http://web.eecs.umich.edu/~mckay/computer/tensor4.0a1.tar.gz
+tar zxf tensor4.0a1.tar.gz
+cd tensor4.0a1
+./configure
+make
+```
+
 ### Table of target molecules
 
 This table shows the results by molecule. It presents the average, standard deviation, minimum, maximum and number of frames used (note this number is different from the number of frames in the molecule when the reference molecule/frame is not included in the calculation). The Overall row shows the overall values as if all frames were independent of each other, i. e., it is not an average of the averages.
@@ -141,6 +198,10 @@ Developed at Weill Cornell Medical College
 ## Contributors
 
 Please, use issues and pull requests for feedback and contributions to this project.
+
+### Thanks
+
+Thanks to Joshua Speidel for his many contributions to this project.
 
 ## License
 

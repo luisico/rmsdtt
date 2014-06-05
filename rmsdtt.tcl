@@ -1,5 +1,5 @@
 #
-#             RMSD Trajectory Tool v3.0
+#             RMSD Trajectory Tool v4.0
 #
 # A GUI interface for RMSD alignment and analysis of trajectories
 #
@@ -22,7 +22,7 @@
 # http://physiology.med.cornell.edu/faculty/hweinstein/vmdplugins/rmsdtt
 
 
-package provide rmsdtt 3.0
+package provide rmsdtt 4.0
 
 namespace eval ::rmsdtt:: {
   namespace export rmsdtt
@@ -86,7 +86,7 @@ proc rmsdtt::rmsdtt {} {
     wm deiconify $w
     return
   }
-  
+
   # GUI look
   #option add *rmsdtt.*font {Helvetica 9}
   #option add *rmsdtt.top.left.sel.background white
@@ -124,21 +124,21 @@ proc rmsdtt::rmsdtt {} {
   $w.menubar.options.menu add checkbutton -label "Statistics" -variable [namespace current]::stats -underline 0
   $w.menubar.options.menu add checkbutton -label "Colorize table" -variable [namespace current]::colorize -underline 0
   pack $w.menubar.options -side left
-  
-  menubutton $w.menubar.help -text "Help" -menu $w.menubar.help.menu -underline 0 -pady 2 
+
+  menubutton $w.menubar.help -text "Help" -menu $w.menubar.help.menu -underline 0 -pady 2
   menu $w.menubar.help.menu -tearoff no
   $w.menubar.help.menu add command -label "About" -command [namespace current]::help_about
   $w.menubar.help.menu add command -label "Help..." -command "vmd_open_url http://physiology.med.cornell.edu/faculty/hweinstein/vmdplugins/rmsdtt/index.html"
   pack $w.menubar.help -side right
-  
+
   # top frame
   frame $w.top
   pack $w.top -side top -fill x
-  
+
   # Selection
   frame $w.top.left -relief ridge
   pack $w.top.left -side left -fill both -expand yes
-  
+
   text $w.top.left.sel -height 3 -width 25 -highlightthickness 0 -selectborderwidth 0 -exportselection yes -wrap word -relief sunken -bd 1
   pack $w.top.left.sel -side top -fill both -expand yes
   $w.top.left.sel insert end "protein"
@@ -174,7 +174,7 @@ proc rmsdtt::rmsdtt {} {
   if {$swap_use} {
     labelframe $w.top.left.swap -text "Swap Atoms" -relief ridge -bd 2
     pack $w.top.left.swap -side top -fill x
-    
+
     checkbutton $w.top.left.swap.0 -text "On/Off" -variable [namespace current]::swap_sw -command [namespace current]::ctrlgui
     menubutton $w.top.left.swap.type -relief raised -direction flush -textvariable [namespace current]::swap_type -menu $w.top.left.swap.type.menu
     menu $w.top.left.swap.type.menu -tearoff no
@@ -183,7 +183,7 @@ proc rmsdtt::rmsdtt {} {
     pack $w.top.left.swap.0 $w.top.left.swap.type $w.top.left.swap.print -side left -anchor w
     pack $w.top.left.swap.list -side right
   }
-  
+
   # Weighted rmsd
   labelframe $w.top.left.weighted -text "Weights" -relief ridge -bd 2
   pack $w.top.left.weighted -side top -fill x
@@ -211,7 +211,7 @@ proc rmsdtt::rmsdtt {} {
   button $w.top.right.pushfr.rmsd -text "RMSD" -relief raised -command [namespace current]::doRmsd -pady 2 -bd 2
   button $w.top.right.pushfr.align -text "ALIGN" -relief raised -command [namespace current]::doAlign -pady 2 -bd 2
   pack $w.top.right.pushfr.rmsd $w.top.right.pushfr.align -side left -fill x -expand yes
-  
+
   # Ref mol
   labelframe $w.top.right.ref -text "Reference mol" -relief ridge -bd 2
   pack $w.top.right.ref -side top -fill x
@@ -234,7 +234,7 @@ proc rmsdtt::rmsdtt {} {
   checkbutton $w.top.right.traj.frames.all -text "All" -variable [namespace current]::traj_all -command [namespace current]::ctrlgui
   pack $w.top.right.traj.frames.0 $w.top.right.traj.frames.reflabel $w.top.right.traj.frames.ref -side left -anchor w -fill x
   pack $w.top.right.traj.frames.all -side right
-  
+
   frame $w.top.right.traj.skip -relief ridge -bd 0
   pack $w.top.right.traj.skip -side top -fill x
 
@@ -246,7 +246,7 @@ proc rmsdtt::rmsdtt {} {
   label $w.top.right.traj.skip.stepslabel -text "Steps:"
   entry $w.top.right.traj.skip.steps -width 5 -textvariable [namespace current]::skip_steps
   pack $w.top.right.traj.skip.0 $w.top.right.traj.skip.inilabel $w.top.right.traj.skip.ini $w.top.right.traj.skip.stepslabel $w.top.right.traj.skip.steps -side left -anchor w
-  # $w.top.right.traj.skip.endlabel $w.top.right.traj.skip.end 
+  # $w.top.right.traj.skip.endlabel $w.top.right.traj.skip.end
 
   frame $w.top.right.traj.time -relief ridge -bd 0
   pack $w.top.right.traj.time -side top -fill x
@@ -265,9 +265,9 @@ proc rmsdtt::rmsdtt {} {
   checkbutton $w.top.right.traj.file.0 -text "Save:" -variable [namespace current]::save_sw\
     -command [namespace code {
       if {$save_sw} {
-	$w.top.right.traj.file.name config -state normal
+        $w.top.right.traj.file.name config -state normal
       } else {
-	$w.top.right.traj.file.name config -state disable
+        $w.top.right.traj.file.name config -state disable
       }
     }]
   entry $w.top.right.traj.file.name -width 15 -textvariable [namespace current]::save_file -state disable
@@ -277,11 +277,11 @@ proc rmsdtt::rmsdtt {} {
   if {[llength [info procs [namespace current]::iterativeFit]] == 1} {
     [namespace current]::iterativeFitGUI
   }
-  
+
   # Data
   frame $w.data -relief ridge -bd 2
   pack $w.data -side top -fill both -expand yes
-  
+
   grid columnconfigure $w.data 1 -weight 1
   grid rowconfigure $w.data 1 -weight 1
 
@@ -299,7 +299,7 @@ proc rmsdtt::rmsdtt {} {
   grid $w.data.header_min -column 4 -row 0
   grid $w.data.header_max -column 5 -row 0
   grid $w.data.header_num -column 6 -row 0
-  
+
   set datalist(id)  [listbox $w.data.body_id  -height 10 -width 4  -relief sunken -exportselection 0 -yscrollcommand [namespace current]::data_yset -selectmode extended]
   set datalist(mol) [listbox $w.data.body_mol -height 10 -width 30 -relief sunken -exportselection 0 -yscrollcommand [namespace current]::data_yset -selectmode extended]
   set datalist(avg) [listbox $w.data.body_avg -height 10 -width 7  -relief sunken -exportselection 0 -yscrollcommand [namespace current]::data_yset -selectmode extended]
@@ -333,16 +333,16 @@ proc rmsdtt::rmsdtt {} {
   grid $w.data.footer_min -column 4 -row 2
   grid $w.data.footer_max -column 5 -row 2
   grid $w.data.footer_num -column 6 -row 2
-  
+
   # Scrollbar
   scrollbar $w.data.scrbar -orient vert -command [namespace current]::data_yview
   #scrollbar $w.scrbar.scrbar -relief raised -activerelief raised -bd 2 -elementborderwidth 2 -orient vert -command {rmsdtt::scroll_data}
   grid $w.data.scrbar -column 7 -row 0 -rowspan 3 -sticky ns
-  
+
   # Add/remove molecules from the list
   frame $w.bottom
   pack $w.bottom -side bottom -fill x
-  
+
   button $w.bottom.delall -text "Erase all" -relief raised -command [namespace current]::mol_del
   button $w.bottom.del    -text "Erase selected" -relief raised -command "[namespace current]::mol_del 1"
   button $w.bottom.addall -text "Add all" -relief raised -command [namespace current]::mol_add
@@ -354,7 +354,7 @@ proc rmsdtt::rmsdtt {} {
   [namespace current]::update_swap_types
   [namespace current]::update_weighted_mol
   [namespace current]::ctrlgui
-  
+
   update
   wm minsize $w [winfo width $w] [winfo height $w]
   wm resizable $w 1 1
@@ -400,15 +400,15 @@ proc rmsdtt::doRmsd {} {
     set ref_frames {}
     if {$traj_sw} {
       if {$traj_all} {
-	for {set i 0} {$i < [molinfo $ref_mol get numframes]} {incr i} {
-	  lappend ref_frames $i
-	}
+        for {set i 0} {$i < [molinfo $ref_mol get numframes]} {incr i} {
+          lappend ref_frames $i
+        }
       } else {
-	if {$traj_ref >= [molinfo $ref_mol get numframes]} {
-	  showMessage "Frame ref out of range (max is [expr {[molinfo $ref_mol get numframes]-1}])"
-	  return -code return
-	}
-	lappend ref_frames $traj_ref
+        if {$traj_ref >= [molinfo $ref_mol get numframes]} {
+          showMessage "Frame ref out of range (max is [expr {[molinfo $ref_mol get numframes]-1}])"
+          return -code return
+        }
+        lappend ref_frames $traj_ref
       }
     } else {
       lappend ref_frames [molinfo $ref_mol get frame]
@@ -417,12 +417,12 @@ proc rmsdtt::doRmsd {} {
 
   #puts "DEBUG: ref_mol: $ref_mol"
   #puts "DEBUG: ref_frames: $ref_frames"
-  
+
   # Get target mol/frames
   # Get all mols to work with
   set target_mol [$datalist(id) get 0 end]
   #puts "DEBUG: target_mol: $target_mol"
-  
+
   # Calculate average structure
   if {$rmsd_base == "ave"} {
     set ave_coor [get_ave_coor $target_mol $rms_sel]
@@ -467,21 +467,21 @@ proc rmsdtt::doRmsd {} {
     set rms_ave($i) 0.0
     foreach j $ref_frames {
       if {$rmsd_base != "ave"} {
-	$ref_sel frame $j
+        $ref_sel frame $j
       }
       foreach k $target_frames {
-	if {$ref_mol == $i && $j == $k} {
-	  continue
-	}
-	#puts -nonewline "DEBUG: computing rmsd($ref_mol:$j,$i:$k)"
-	$target_sel frame $k
-	if {$rmsd_base == "ave"} {
-	  set rmsd($ref_mol:$j,$i:$k) [get_rmsd_ave $ave_coor $target_sel]
-	} else {
-	  set rmsd($ref_mol:$j,$i:$k) [get_rmsd $ref_sel $target_sel]
-	}
-	#puts "   = $rmsd($ref_mol:$j,$i:$k)"
-	set rms_ave($i) [expr {$rms_ave($i) + $rmsd($ref_mol:$j,$i:$k)}]
+        if {$ref_mol == $i && $j == $k} {
+          continue
+        }
+        #puts -nonewline "DEBUG: computing rmsd($ref_mol:$j,$i:$k)"
+        $target_sel frame $k
+        if {$rmsd_base == "ave"} {
+          set rmsd($ref_mol:$j,$i:$k) [get_rmsd_ave $ave_coor $target_sel]
+        } else {
+          set rmsd($ref_mol:$j,$i:$k) [get_rmsd $ref_sel $target_sel]
+        }
+        #puts "   = $rmsd($ref_mol:$j,$i:$k)"
+        set rms_ave($i) [expr {$rms_ave($i) + $rmsd($ref_mol:$j,$i:$k)}]
       }
     }
     set rms_tot [expr {$rms_tot + $rms_ave($i)}]
@@ -504,24 +504,24 @@ proc rmsdtt::doRmsd {} {
     foreach i $target_mol {
       set rms_sd($i) 0.0
       if {$count($i) == 0} {
-	set rms_min($i) 0.0
-	set rms_max($i) 0.0
-	continue
+        set rms_min($i) 0.0
+        set rms_max($i) 0.0
+        continue
       }
       set random $rmsd([lindex [array names rmsd *,$i:*] 0])
       set rms_min($i) $random
       set rms_max($i) $random
       foreach data [array names rmsd *,$i:*] {
-	set temp [expr {$rmsd($data) - $rms_ave($i)}]
-	set rms_sd($i) [expr {$rms_sd($i) + $temp*$temp}]
-	if {$rmsd($data) < $rms_min($i) } {set rms_min($i) $rmsd($data)}
-	if {$rmsd($data) > $rms_max($i) } {set rms_max($i) $rmsd($data)}
+        set temp [expr {$rmsd($data) - $rms_ave($i)}]
+        set rms_sd($i) [expr {$rms_sd($i) + $temp*$temp}]
+        if {$rmsd($data) < $rms_min($i) } {set rms_min($i) $rmsd($data)}
+        if {$rmsd($data) > $rms_max($i) } {set rms_max($i) $rmsd($data)}
       }
       set sd_tot [expr {$sd_tot + $rms_sd($i)}]
       if {$count($i) == 1} {
-	set rms_sd($i) [expr {sqrt($rms_sd($i))}]
+        set rms_sd($i) [expr {sqrt($rms_sd($i))}]
       } else {
-	set rms_sd($i) [expr {sqrt( $rms_sd($i) / ($count($i)-1) )}]
+        set rms_sd($i) [expr {sqrt( $rms_sd($i) / ($count($i)-1) )}]
       }
       #puts "DEBUG: rms_sd($i) = $rms_sd($i)"
       if {$rms_min($i) < $min_tot} {set min_tot $rms_min($i)}
@@ -603,8 +603,8 @@ proc rmsdtt::get_ref_mol {} {
     selected {
       set sel_index [lindex [$datalist(mol) curselection] 0]
       if {$sel_index == ""} {
-	showMessage "No molecule has been selected!"
-	return -code return
+        showMessage "No molecule has been selected!"
+        return -code return
       }
       set mol [$datalist(id) get $sel_index]
     }
@@ -618,7 +618,7 @@ proc rmsdtt::get_weights { sel } {
   variable weighted_field
   variable rmsd_base
   variable datalist
-  
+
   if {$weighted_mol eq "ref"} {
     set mol [[namespace current]::get_ref_mol]
   } else {
@@ -634,7 +634,7 @@ proc rmsdtt::get_rmsd { sel1 sel2 } {
   variable weighted_sw
   variable weighted_mol
   variable weighted_field
-  
+
   if {$weighted_sw} {
     set weights [[namespace current]::get_weights $sel1]
     set rmsd -1
@@ -661,30 +661,30 @@ proc rmsdtt::get_rmsd { sel1 sel2 } {
       set s [atomselect $mol2 "residue $r"]
       ::swap::swap_residue $s $frame2
       if {$weighted_sw} {
-	set rmsd2 [measure rmsd $sel1 $sel2 weight $weights]
+        set rmsd2 [measure rmsd $sel1 $sel2 weight $weights]
       } else {
-	set rmsd2 [measure rmsd $sel1 $sel2]
+        set rmsd2 [measure rmsd $sel1 $sel2]
       }
       if {$rmsd2 < $rmsd} {
-	if {$swap_print} {
-	  puts "swapped mol $mol2 frame $frame2 residue $r ([lindex [$s get {resname resid chain segname}] 0]) $rmsd $rmsd2"
-	}
-	set rmsd $rmsd2
-	lappend swapped $s
+        if {$swap_print} {
+          puts "swapped mol $mol2 frame $frame2 residue $r ([lindex [$s get {resname resid chain segname}] 0]) $rmsd $rmsd2"
+        }
+        set rmsd $rmsd2
+        lappend swapped $s
       } else {
-	::swap::swap_residue $s $frame2
+        ::swap::swap_residue $s $frame2
       }
     }
 
     foreach s $swapped {
       if {$s == ""} {
-	continue
+        continue
       } else {
-	::swap::swap_residue $s $frame2
+        ::swap::swap_residue $s $frame2
       }
     }
   }
-  
+
   return $rmsd
 }
 
@@ -703,38 +703,38 @@ proc rmsdtt::get_ave_coor {mols sel_text} {
       set avpos [measure avpos [atomselect $i $sel_text] first 0 last [expr {$nframes-1}] step 1]
       #puts "$i avpos: $avpos"
       if {$initialize} {
-	for {set j 0} {$j < $natoms} {incr j} {
-	  lappend ave_coor [vecscale [lindex $avpos $j] $nframes]
-	}
-	set initialize 0
+        for {set j 0} {$j < $natoms} {incr j} {
+          lappend ave_coor [vecscale [lindex $avpos $j] $nframes]
+        }
+        set initialize 0
       } else {
-	for {set j 0} {$j < $natoms} {incr j} {
-	  lset ave_coor $j [vecadd [lindex $ave_coor $j] [vecscale [lindex $avpos $j] $nframes]]
-	}
+        for {set j 0} {$j < $natoms} {incr j} {
+          lset ave_coor $j [vecadd [lindex $ave_coor $j] [vecscale [lindex $avpos $j] $nframes]]
+        }
       }
     } else {
       set coor [[atomselect $i $sel_text frame [molinfo $i get frame]] get {x y z}]
       #puts "$i coor: $coor"
       set nframes 1
       if {$initialize} {
-	set ave_coor $coor
-	set initialize 0
+        set ave_coor $coor
+        set initialize 0
       } else {
-	for {set j 0} {$j < $natoms} {incr j} {
-	  lset ave_coor $j [vecadd [lindex $ave_coor $j] [lindex $coor $j]]
-	}
+        for {set j 0} {$j < $natoms} {incr j} {
+          lset ave_coor $j [vecadd [lindex $ave_coor $j] [lindex $coor $j]]
+        }
       }
     }
     set tot_frames [expr {$tot_frames + $nframes}]
     #puts "$i sum: $ave_coor"
   }
-  
+
   #puts "tot_frames: $tot_frames"
   for {set j 0} {$j < $natoms} {incr j} {
     lset ave_coor $j [vecscale [lindex $ave_coor $j] [expr {double(1)/$tot_frames}]]
   }
   #puts "AVE_COOR: $ave_coor"
-  
+
   return $ave_coor
 }
 
@@ -749,7 +749,7 @@ proc rmsdtt::get_rmsd_ave {ref_coor target_sel} {
     set rmsd [expr { $rmsd + [veclength2 [vecsub [lindex $ref_coor $k] [lindex $target_coor $k]]] }]
   }
   set rmsd [expr {sqrt($rmsd/$numatoms)}]
-  
+
   return $rmsd
 }
 
@@ -761,7 +761,7 @@ proc rmsdtt::doAlign {} {
   variable traj_sw
   variable traj_all
   variable datalist
-  
+
   if {$traj_all} {
     showMessage "All option not available for Alignment! Deselect it and select a frame reference."
     return -code return
@@ -784,14 +784,14 @@ proc rmsdtt::doAlign {} {
     set sel [atomselect $i $rms_sel]
     if {$traj_sw == 0} {
       if {$i != $ref_mol} {
-	align $sel [molinfo $i get frame] $sel_ref
+        align $sel [molinfo $i get frame] $sel_ref
       }
     } else {
       for {set j 0} {$j < [molinfo $i get numframes]} {incr j} {
-	if {$i == $ref_mol && $j == $traj_ref} {
-	  continue
-	}
-	align $sel $j $sel_ref
+        if {$i == $ref_mol && $j == $traj_ref} {
+          continue
+        }
+        align $sel $j $sel_ref
       }
     }
   }
@@ -825,11 +825,11 @@ proc rmsdtt::draw_equiv {} {
       graphics $equiv_mol delete $l
     }
   }
-  
+
   if {!$equiv_sw} {
     return
   }
-  
+
   set target_mol [$datalist(id) get 0 end]
   set sel [set_sel]
 
@@ -851,33 +851,33 @@ proc rmsdtt::draw_equiv {} {
     } else {
       set coor1 [[atomselect $mol1 $sel] get {x y z}]
     }
-    
+
     for {set j [expr {$i+1}]} {$j < [llength $target_mol]} {incr j} {
       set mol2 [lindex $target_mol $j]
       if {$equiv_byres} {
-	set coor2 {}
-	set residues [lsort -unique -integer [[atomselect $mol2 $sel] get residue]]
-	foreach r $residues {
+        set coor2 {}
+        set residues [lsort -unique -integer [[atomselect $mol2 $sel] get residue]]
+        foreach r $residues {
           set ctmp [[atomselect $mol2 "residue $r and name $equiv_atom"] get {x y z}]
           if {[llength $ctmp] == 0} {
             set ctmp [[atomselect $mol2 "residue $r"] get {x y z}]
           }
           lappend coor2 [lindex $ctmp 0]
-	}
+        }
       } else {
-	set coor2 [[atomselect $mol2 $sel] get {x y z}]
+        set coor2 [[atomselect $mol2 $sel] get {x y z}]
       }
       if {[llength $coor1] != [llength $coor2]} {
-	puts "mol$mol1 and mol$mol2 have different number of atoms"
-	continue
+        puts "mol$mol1 and mol$mol2 have different number of atoms"
+        continue
       }
       foreach c1 $coor1 c2 $coor2 {
-	lappend equiv_lines [graphics $equiv_mol line $c1 $c2 width 1 style dashed]
+        lappend equiv_lines [graphics $equiv_mol line $c1 $c2 width 1 style dashed]
       }
     }
   }
 }
-  
+
 
 proc rmsdtt::align {sel1 frame1 sel2} {
   variable weighted_sw
@@ -915,13 +915,13 @@ proc rmsdtt::SaveDataBrowse { {type "data"} } {
     {"Postscript Files" ".ps"}
     {"All files" ".*"}
   }
-  
+
   set file [tk_getSaveFile -filetypes $typeList -defaultextension ".dat" -title "Select file to save data" -parent .rmsdtt]
-  
+
   if {$file == ""} {
     return
   }
-  
+
   if {$type == "data"} {
     [namespace current]::saveData $file
   } else {
@@ -978,7 +978,7 @@ proc rmsdtt::saveData { file } {
   foreach i $target_mol {
     set target_frames($i) [lsort -unique -integer $target_frames($i)]
   }
-  
+
   if {$traj_sw && $traj_all} {
     # Header
     if {$time_sw} {
@@ -986,25 +986,25 @@ proc rmsdtt::saveData { file } {
     } else {
       set output "ref_mol\tref_frame\tmol\tframe\t   rmsd\n"
     }
-   
+
     foreach k $ref_frames {
       set ref_time [expr {$time_ini + $time_step * $k}]
       foreach i $target_mol {
-	foreach j $target_frames($i) {
-	  if {![info exists rmsd($ref_mol:$k,$i:$j)]} {
-	    continue
-	  }
-	  if {$time_sw} {
-	    set time [expr {$time_ini + $time_step * $j}]
-	    append output [format "%7d\t%8.2f\t%3d\t%8.2f\t" $ref_mol $ref_time $i $time]
-	  } else {
-	    append output [format "%7d\t%9d\t%3d\t%5d\t" $ref_mol $k $i $j]
-	  }
-	  append output [format "%7.3f\n" $rmsd($ref_mol:$k,$i:$j)]
-	}
+        foreach j $target_frames($i) {
+          if {![info exists rmsd($ref_mol:$k,$i:$j)]} {
+            continue
+          }
+          if {$time_sw} {
+            set time [expr {$time_ini + $time_step * $j}]
+            append output [format "%7d\t%8.2f\t%3d\t%8.2f\t" $ref_mol $ref_time $i $time]
+          } else {
+            append output [format "%7d\t%9d\t%3d\t%5d\t" $ref_mol $k $i $j]
+          }
+          append output [format "%7.3f\n" $rmsd($ref_mol:$k,$i:$j)]
+        }
       }
     }
-    
+
   } else {
     set ref "$ref_mol:[lindex $ref_frames 0]"
 
@@ -1018,24 +1018,24 @@ proc rmsdtt::saveData { file } {
       append output [format " %7s" "mol$i"]
     }
     append output "\n"
-    
+
     # Data
     for {set j $ini} {$j <= $maxframe} {incr j $steps} {
       if {$time_sw} {
-	set time [expr {$time_ini + $time_step * $j}]
-	append output [format "%8.2f" $time]
+        set time [expr {$time_ini + $time_step * $j}]
+        append output [format "%8.2f" $time]
       } else {
-	append output [format "%5d" $j]
+        append output [format "%5d" $j]
       }
-      
+
       foreach i $target_mol {
-	if {[info exists rmsd($ref,$i:$j)]} {
-	  append output [format " %7.3f" $rmsd($ref,$i:$j)]
-	} else {
-	  append output [format " %7s" {NA}]
-	}
+        if {[info exists rmsd($ref,$i:$j)]} {
+          append output [format " %7.3f" $rmsd($ref,$i:$j)]
+        } else {
+          append output [format " %7s" {NA}]
+        }
       }
-      
+
       append output "\n"
     }
   }
@@ -1060,9 +1060,9 @@ proc rmsdtt::saveSummary { file } {
   set output [format "%4s  %-25s  %8s  %8s  %8s  %8s  %4s\n" id mol avg sd min max num]
   for {set i 0} {$i < [$datalist(id) size]} {incr i} {
     append output [format "%4d  %-25s  %8.3f  %8.3f  %8.3f  %8.3f  %4d\n" [$datalist(id) get $i] \
-		     [$datalist(mol) get $i] [$datalist(avg) get $i] [$datalist(sd) get $i] \
-		     [$datalist(min) get $i] [$datalist(max) get $i] [$datalist(num) get $i]
-		  ]
+                     [$datalist(mol) get $i] [$datalist(avg) get $i] [$datalist(sd) get $i] \
+                     [$datalist(min) get $i] [$datalist(max) get $i] [$datalist(num) get $i]
+                  ]
   }
 
   # Save to file
@@ -1087,23 +1087,23 @@ proc rmsdtt::tempfile {prefix suffix} {
     set newname $prefix
     for {set j 0} {$j < $nrand_chars} {incr j} {
       append newname [string index $chars \
-			[expr {([clock clicks] ^ $mypid) % 62}]]
+                        [expr {([clock clicks] ^ $mypid) % 62}]]
     }
     append newname $suffix
     if {[file exists $newname]} {
       after 1
     } else {
       if {[catch {open $newname $access $permission} channel]} {
-	if {!$checked_dir_writable} {
-	  set dirname [file dirname $newname]
-	  if {![file writable $dirname]} {
-	    error "Directory $dirname is not writable"
-	  }
-	  set checked_dir_writable 1
-	}
+        if {!$checked_dir_writable} {
+          set dirname [file dirname $newname]
+          if {![file writable $dirname]} {
+            error "Directory $dirname is not writable"
+          }
+          set checked_dir_writable 1
+        }
       } else {
-	# Success
-	return [list $newname $channel]
+        # Success
+        return [list $newname $channel]
       }
     }
   }
@@ -1139,12 +1139,12 @@ proc rmsdtt::doPlot {} {
   variable ref_frames
   variable plot_program
   global tcl_platform
-  
+
   if {![array exists rmsd]} {
     showMessage "No data available to plot yet!"
     return -code return
   }
-  
+
 
   if {$skip_sw} {
     set ini $skip_start
@@ -1170,22 +1170,22 @@ proc rmsdtt::doPlot {} {
   foreach i $target_mol {
     set target_frames($i) [lsort -unique -integer $target_frames($i)]
   }
-  
+
   # Prepare sets
   set ref "$ref_mol:[lindex $ref_frames 0]"
   foreach i $target_mol {
     for {set j $ini} {$j <= $maxframe} {incr j $steps} {
       if {[info exists rmsd($ref,$i:$j)]} {
-	if {$time_sw} {
-	  lappend x($i) [expr {$time_ini + $time_step * $j}]
-	} else {
-	  lappend x($i) $j
-	}
-	lappend y($i) $rmsd($ref,$i:$j)
+        if {$time_sw} {
+          lappend x($i) [expr {$time_ini + $time_step * $j}]
+        } else {
+          lappend x($i) $j
+        }
+        lappend y($i) $rmsd($ref,$i:$j)
       }
     }
   }
-  
+
 
   # Multiplot
   # ---------
@@ -1194,7 +1194,7 @@ proc rmsdtt::doPlot {} {
       showMessage "Plotting in Multiplot not available: package multiplot not installed!\nDo you have the latest VMD version?"
       return
     }
-    
+
     if {$time_sw} {
       set title "Rmsd vs Time \"$rms_sel)\""
       set xlab "Time"
@@ -1204,20 +1204,20 @@ proc rmsdtt::doPlot {} {
     }
     set ylab "Rmsd (A)"
     set plothandle [multiplot -title $title -xlabel $xlab -ylabel $ylab -nostats]
-    
+
     set k 0
     foreach i $target_mol {
       set coln $i
       while {$coln > 15} {
-	set coln [expr {$coln - 16}]
+        set coln [expr {$coln - 16}]
       }
       set color [index2rgb $coln]
       set iname "[molinfo $i get name] ($i)"
-      
+
       if {[llength $y($i)] == 1} {
-	$plothandle add $x($i) $y($i) -marker circle -radius 4 -nolines -fillcolor $color -linecolor $color -nostats -legend $iname
+        $plothandle add $x($i) $y($i) -marker circle -radius 4 -nolines -fillcolor $color -linecolor $color -nostats -legend $iname
       } else {
-	$plothandle add $x($i) $y($i) -marker point -radius 2 -fillcolor $color -linecolor $color -nostats -legend $iname
+        $plothandle add $x($i) $y($i) -marker point -radius 2 -fillcolor $color -linecolor $color -nostats -legend $iname
       }
       incr k
     }
@@ -1228,22 +1228,22 @@ proc rmsdtt::doPlot {} {
     # -------
   } elseif {$plot_program == "xmgrace"} {
     if {$tcl_platform(platform) == "unix" } {
-      
+
       set f [tempfile rmsdtt .tmp]
       set filename [lindex $f 0]
       set pipe_id [lindex $f 1]
       fconfigure $pipe_id -buffering line
-      
+
       puts $pipe_id "@ page size 576, 432"
       puts $pipe_id "@ g0 on"
       puts $pipe_id "@ with g0"
       puts $pipe_id "@ subtitle \"$rms_sel\""
       if {$time_sw} {
-	puts $pipe_id "@ title \"Rmsd vs Time\""
-	puts $pipe_id "@ xaxis  label \"Time\""
+        puts $pipe_id "@ title \"Rmsd vs Time\""
+        puts $pipe_id "@ xaxis  label \"Time\""
       } else {
-	puts $pipe_id "@ title \"Rmsd vs Frame\""
-	puts $pipe_id "@ xaxis  label \"Frame\""
+        puts $pipe_id "@ title \"Rmsd vs Frame\""
+        puts $pipe_id "@ xaxis  label \"Frame\""
       }
       puts $pipe_id "@ yaxis  label \"Rmsd (A)\""
       puts $pipe_id "@ TYPE xy"
@@ -1253,25 +1253,25 @@ proc rmsdtt::doPlot {} {
 
       set k 0
       foreach i $target_mol {
-	set iname "[molinfo $i get name] ($i)"
-	puts $pipe_id "@ s$k legend \"$iname\""
-	if {[llength $y($i)] == 1} {
-	  puts $pipe_id "@ s$k symbol 1"
-	}
-	for {set j 0} {$j < [llength $y($i)]} {incr j} {
-	  puts $pipe_id "[lindex $x($i) $j] [lindex $y($i) $j]"
-	}
-      	puts $pipe_id ""
-	incr k
+        set iname "[molinfo $i get name] ($i)"
+        puts $pipe_id "@ s$k legend \"$iname\""
+        if {[llength $y($i)] == 1} {
+          puts $pipe_id "@ s$k symbol 1"
+        }
+        for {set j 0} {$j < [llength $y($i)]} {incr j} {
+          puts $pipe_id "[lindex $x($i) $j] [lindex $y($i) $j]"
+        }
+        puts $pipe_id ""
+        incr k
       }
-      
+
       close $pipe_id
       set status [catch {exec xmgrace $filename &} msg]
       if { $status } {
-	showMessage "Could not open xmgrace. Error returned:\n $msg"
-	file delete -force $filename
-	return -code return
-      } 
+        showMessage "Could not open xmgrace. Error returned:\n $msg"
+        file delete -force $filename
+        return -code return
+      }
     } else {
       showMessage "Plotting in Xmgrace only availabe for Unix systems"
     }
@@ -1282,13 +1282,13 @@ proc rmsdtt::doPlot {} {
   } elseif {$plot_program == "excel"} {
     if {$tcl_platform(platform) == "windows" } {
       if [catch {package require tcom} msg] {
-	showMessage "Plotting in MS Excel not available: package tcom not installed!\nFollow instruction at http://physiology.med.cornell.edu/faculty/hweinstein/vmdplugins/rmsdtt/index.html#RMSDTT_install"
-	return
+        showMessage "Plotting in MS Excel not available: package tcom not installed!\nFollow instruction at http://physiology.med.cornell.edu/faculty/hweinstein/vmdplugins/rmsdtt/index.html#RMSDTT_install"
+        return
       }
       set excel [::tcom::ref createobject "Excel.Application"]
       #set excel [::tcom::ref getactiveobject "Excel.Application"]
       $excel Visible 1
-      
+
       set workbooks [$excel Workbooks]
       set workbook [$workbooks Add]
       set worksheets [$workbook Worksheets]
@@ -1296,27 +1296,27 @@ proc rmsdtt::doPlot {} {
       [$worksheets Item [expr {2}]] Delete
       set worksheet [$worksheets Item [expr {1}]]
       $worksheet Name "RMSDTT data"
-      
+
       set cells [$worksheet Cells]
       if {$time_sw} {
-	set exceltitle "Rmsd vs Time"
-	$cells Item 1 1 "Time"
+        set exceltitle "Rmsd vs Time"
+        $cells Item 1 1 "Time"
       } else {
-	set exceltitle "Rmsd vs Frame"
-	$cells Item 1 1 "Frame"
+        set exceltitle "Rmsd vs Frame"
+        $cells Item 1 1 "Frame"
       }
 
       set k 1
       foreach i $target_mol {
-	incr k
-	set iname "[molinfo $i get name] ($i)"
-	$cells Item 1 $k $iname
-	for {set j 0} {$j < [llength $y($i)]} {incr j} {
-	  $cells Item [expr {$j+2}] 1 [lindex $x($i) $j]
-	  $cells Item [expr {$j+2}] $k [lindex $y($i) $j]
-	}
+        incr k
+        set iname "[molinfo $i get name] ($i)"
+        $cells Item 1 $k $iname
+        for {set j 0} {$j < [llength $y($i)]} {incr j} {
+          $cells Item [expr {$j+2}] 1 [lindex $x($i) $j]
+          $cells Item [expr {$j+2}] $k [lindex $y($i) $j]
+        }
       }
-      
+
       set charts [$workbook Charts]
       set chart [$charts Add]
       $chart Name "RMSDTT graph"
@@ -1325,21 +1325,21 @@ proc rmsdtt::doPlot {} {
       $chart ChartWizard [$worksheet Range "A1" $endrange] -4169 [::tcom::na] 2 1 [expr {$k-1}] 1 "$exceltitle\n($rms_sel)"
       $chart ChartType 75
       [[$chart PlotArea] Interior] ColorIndex 0
-      
+
       set axes [$chart Axes]
       set xaxis [$axes Item 1]
       $xaxis HasMajorGridlines 0
       $xaxis HasTitle 1
       if {$time_sw} {
-	[$xaxis AxisTitle] Text "Time"
+        [$xaxis AxisTitle] Text "Time"
       } else {
-	[$xaxis AxisTitle] Text "Frame"
+        [$xaxis AxisTitle] Text "Frame"
       }
       set yaxis [$axes Item 2]
       $yaxis HasMajorGridlines 0
       $yaxis HasTitle 1
       [$yaxis AxisTitle] Text "Rmsd (A)"
-    
+
     } else {
       showMessage "Plotting in MS Excel only availabe for Windows systems"
     }
@@ -1387,17 +1387,17 @@ proc rmsdtt::get_frames_for_mol { mol } {
     for {set n 0} {$n < [molinfo $mol get numframes]} {incr n} {
       lappend list $n
     }
-    
+
     if {$skip_sw} {
       set result {}
       set steps [expr {$skip_steps + 1}]
       if {$skip_end == "end"} {
-	set end [expr {[llength $list] -1}]
+        set end [expr {[llength $list] -1}]
       } else {
-	set end [lsearch $list $skip_end]
+        set end [lsearch $list $skip_end]
       }
       for {set i $skip_start} {$i <= $end} {incr i $steps} {
-	lappend result [lindex $list $i]
+        lappend result [lindex $list $i]
       }
       set list $result
     }
@@ -1410,13 +1410,13 @@ proc rmsdtt::get_frames_for_mol { mol } {
 
 proc rmsdtt::showMessage {mess} {
   bell
-  toplevel .messpop 
+  toplevel .messpop
   grab .messpop
   wm title .messpop "Warning"
     message .messpop.msg -relief groove -bd 2 -text $mess -aspect 400 -justify center -padx 20 -pady 20
-  
+
   button .messpop.okb -text OK -command {destroy .messpop ; return 0}
-  pack .messpop.msg .messpop.okb -side top 
+  pack .messpop.msg .messpop.okb -side top
 }
 
 
@@ -1476,9 +1476,9 @@ proc rmsdtt::ctrlgui {} {
       $w.top.right.traj.frames.reflabel config -state normal
       $w.top.right.traj.frames.all config -state normal
       if {$traj_all} {
-	$w.top.right.traj.frames.ref config -state disable
+        $w.top.right.traj.frames.ref config -state disable
       } else {
-	$w.top.right.traj.frames.ref config -state normal
+        $w.top.right.traj.frames.ref config -state normal
       }
     }
     $w.top.right.traj.time.0 config -state normal
@@ -1552,7 +1552,7 @@ proc rmsdtt::ctrlgui {} {
 
   if {$equiv_sw} {
     $w.top.left.equiv.byres config -state normal
-    
+
     if {$equiv_byres} {
       $w.top.left.equiv.atomlabel config -state normal
       $w.top.left.equiv.atom config -state normal
@@ -1606,7 +1606,7 @@ proc rmsdtt::update_swap_types {} {
   variable swap_use
 
   if {!$swap_use} {return}
-  
+
   $w.top.left.swap.type.menu delete 0 end
   $w.top.left.swap.type.menu add radiobutton -value "all" -label "all" -variable ::rmsdtt::swap_type
 
@@ -1626,12 +1626,12 @@ proc rmsdtt::update_weighted_mol {} {
   $w.top.left.weighted.mol.menu delete 0 end
   $w.top.left.weighted.mol.menu add radiobutton -value "ref" -label "ref" -variable [namespace current]::weighted_mol
   $w.top.left.weighted.mol.menu add radiobutton -value "top" -label "top" -variable [namespace current]::weighted_mol
-  
+
   set mollist [molinfo list]
   if { [llength $mollist] != 0 } {
     foreach id $mollist {
       if {[molinfo $id get filetype] != "graphics"} {
- 	$w.top.left.weighted.mol.menu add radiobutton -value $id -label "$id [molinfo $id get name]" -variable [namespace current]::weighted_mol
+        $w.top.left.weighted.mol.menu add radiobutton -value $id -label "$id [molinfo $id get name]" -variable [namespace current]::weighted_mol
       }
     }
   }
@@ -1668,12 +1668,12 @@ proc rmsdtt::multiple_sel {widget} {
 
 proc rmsdtt::mol_del { {selected 0} } {
   variable datalist
-  
+
   if {$selected} {
     set sele [lsort -integer -decreasing [$datalist(mol) curselection]]
     foreach key [array names datalist] {
       foreach s $sele {
-	$datalist($key) delete $s
+        $datalist($key) delete $s
       }
     }
     [namespace current]::color_data
@@ -1687,7 +1687,7 @@ proc rmsdtt::mol_del { {selected 0} } {
 
 proc rmsdtt::mol_add { {active 0} } {
   variable datalist
-  
+
   foreach key [array names datalist] {
     $datalist($key) delete 0 end
   }
@@ -1695,7 +1695,7 @@ proc rmsdtt::mol_add { {active 0} } {
     set molid [molinfo index $i]
     if {$active && ![molinfo $molid get active]} {
       continue
-    }      
+    }
     foreach key [list avg sd min max num] {
       $datalist($key) insert end ""
     }
@@ -1714,14 +1714,14 @@ proc rmsdtt::color_data { {colorize 0} } {
     if {$colorize} {
       set coln [$datalist(id) get $i]
       while {$coln > 15} {
-	set coln [expr {$coln - 16}]
+        set coln [expr {$coln - 16}]
       }
       set color [index2rgb $coln]
     } else {
       if {$color == "grey80"} {
-	set color "grey85"
+        set color "grey85"
       } else {
-	set color "grey80"
+        set color "grey80"
       }
     }
     foreach key [array names datalist] {
@@ -1764,7 +1764,7 @@ proc rmsdtt::chooseHistoryItem {sel} {
   regexp {(.*)\s+\[sw:\s+(.*)\]} $sel foo sel_text mod
   $w.top.left.sel delete 1.0 end
   $w.top.left.sel insert end $sel_text
-  
+
   switch $mod {
     trace {
       set trace_only 1
@@ -1791,7 +1791,7 @@ Weill Medical College of Cornell University
 1300 York Avenue
 New York, NY 10021
 
-Copyright (C) 2006 Luis Gracia <lug2002@med.cornell.edu> 
+Copyright (C) 2004-2014 Luis Gracia <lug2002@med.cornell.edu>
 
 "
 }
